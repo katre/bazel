@@ -30,6 +30,7 @@ import com.google.devtools.build.lib.analysis.ConfiguredTarget;
 import com.google.devtools.build.lib.analysis.DependencyResolver.InconsistentAspectOrderException;
 import com.google.devtools.build.lib.analysis.TargetAndConfiguration;
 import com.google.devtools.build.lib.analysis.ToolchainContext;
+import com.google.devtools.build.lib.analysis.ToolchainContextBuilder;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.analysis.config.BuildOptions;
 import com.google.devtools.build.lib.analysis.config.ConfigMatchingProvider;
@@ -65,7 +66,6 @@ import com.google.devtools.build.lib.skyframe.ConfiguredTargetFunction.Configure
 import com.google.devtools.build.lib.skyframe.ConfiguredTargetFunction.DependencyEvaluationException;
 import com.google.devtools.build.lib.skyframe.SkyframeExecutor.BuildViewProvider;
 import com.google.devtools.build.lib.skyframe.SkylarkImportLookupFunction.SkylarkImportFailedException;
-import com.google.devtools.build.lib.skyframe.ToolchainUtil.ToolchainContextException;
 import com.google.devtools.build.lib.syntax.Type.ConversionException;
 import com.google.devtools.build.lib.util.OrderedSetMultimap;
 import com.google.devtools.build.skyframe.SkyFunction;
@@ -403,11 +403,11 @@ public final class AspectFunction implements SkyFunction {
       }
 
       // Determine what toolchains are needed by this target.
-      ToolchainContext toolchainContext;
+      ToolchainContextBuilder toolchainContextBuilder;
       try {
         ImmutableSet<Label> requiredToolchains = aspect.getDefinition().getRequiredToolchains();
-        toolchainContext =
-            ToolchainUtil.createToolchainContext(
+        toolchainContextBuilder =
+            ToolchainContextBuilder.create(
                 env,
                 String.format(
                     "aspect %s applied to %s",
@@ -416,7 +416,7 @@ public final class AspectFunction implements SkyFunction {
                 requiredToolchains,
                 /* execConstraintLabels= */ ImmutableSet.of(),
                 key.getAspectConfigurationKey());
-      } catch (ToolchainContextException e) {
+      } catch (ToolchainException e) {
         // TODO(katre): better error handling
         throw new AspectCreationException(
             e.getMessage(), new LabelCause(key.getLabel(), e.getMessage()));
@@ -434,7 +434,9 @@ public final class AspectFunction implements SkyFunction {
                 originalTargetAndAspectConfiguration,
                 aspectPath,
                 configConditions,
-                toolchainContext,
+                toolchainContextBuilder == null
+                    ? ImmutableSet.of()
+                    : toolchainContextBuilder.resolvedToolchainLabels(),
                 ruleClassProvider,
                 view.getHostConfiguration(originalTargetAndAspectConfiguration.getConfiguration()),
                 transitivePackagesForPackageRootResolution,
@@ -449,6 +451,12 @@ public final class AspectFunction implements SkyFunction {
       if (!transitiveRootCauses.isEmpty()) {
         throw new AspectFunctionException(
             new AspectCreationException("Loading failed", transitiveRootCauses.build()));
+      }
+
+      // Load the requested toolchains into the ToolchainContext, now that we have dependencies.
+      ToolchainContext toolchainContext = null;
+      if (toolchainContextBuilder != null) {
+        toolchainContext = toolchainContextBuilder.loadToolchainProviders(depValueMap);
       }
 
       return createAspect(

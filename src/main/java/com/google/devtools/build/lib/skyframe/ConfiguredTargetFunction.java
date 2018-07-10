@@ -32,6 +32,7 @@ import com.google.devtools.build.lib.analysis.DependencyResolver.InconsistentAsp
 import com.google.devtools.build.lib.analysis.PlatformSemantics;
 import com.google.devtools.build.lib.analysis.TargetAndConfiguration;
 import com.google.devtools.build.lib.analysis.ToolchainContext;
+import com.google.devtools.build.lib.analysis.ToolchainContextBuilder;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.analysis.config.BuildOptions;
 import com.google.devtools.build.lib.analysis.config.ConfigMatchingProvider;
@@ -67,7 +68,6 @@ import com.google.devtools.build.lib.packages.Target;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.skyframe.AspectFunction.AspectCreationException;
 import com.google.devtools.build.lib.skyframe.SkyframeExecutor.BuildViewProvider;
-import com.google.devtools.build.lib.skyframe.ToolchainUtil.ToolchainContextException;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.util.OrderedSetMultimap;
@@ -230,7 +230,7 @@ public final class ConfiguredTargetFunction implements SkyFunction {
 
     SkyframeDependencyResolver resolver = view.createDependencyResolver(env);
 
-    ToolchainContext toolchainContext = null;
+    ToolchainContextBuilder toolchainContextBuilder = null;
 
     // TODO(janakr): this acquire() call may tie up this thread indefinitely, reducing the
     // parallelism of Skyframe. This is a strict improvement over the prior state of the code, in
@@ -273,8 +273,8 @@ public final class ConfiguredTargetFunction implements SkyFunction {
 
           // Collect local (target, rule) constraints for filtering out execution platforms.
           ImmutableSet<Label> execConstraintLabels = getExecutionPlatformConstraints(rule);
-          toolchainContext =
-              ToolchainUtil.createToolchainContext(
+          toolchainContextBuilder =
+              ToolchainContextBuilder.create(
                   env,
                   rule.toString(),
                   requiredToolchains,
@@ -294,7 +294,9 @@ public final class ConfiguredTargetFunction implements SkyFunction {
               ctgValue,
               ImmutableList.<Aspect>of(),
               configConditions,
-              toolchainContext,
+              toolchainContextBuilder == null
+                  ? ImmutableSet.of()
+                  : toolchainContextBuilder.resolvedToolchainLabels(),
               ruleClassProvider,
               view.getHostConfiguration(configuration),
               transitivePackagesForPackageRootResolution,
@@ -309,6 +311,13 @@ public final class ConfiguredTargetFunction implements SkyFunction {
                 "Analysis failed", configuration, transitiveRootCauses.build()));
       }
       Preconditions.checkNotNull(depValueMap);
+
+      // Load the requested toolchains into the ToolchainContext, now that we have dependencies.
+      ToolchainContext toolchainContext = null;
+      if (toolchainContextBuilder != null) {
+        toolchainContext = toolchainContextBuilder.loadToolchainProviders(depValueMap);
+      }
+
       ConfiguredTargetValue ans =
           createConfiguredTarget(
               view,
@@ -325,9 +334,9 @@ public final class ConfiguredTargetFunction implements SkyFunction {
         ConfiguredValueCreationException cvce = (ConfiguredValueCreationException) e.getCause();
 
         // Check if this is caused by an unresolved toolchain, and report it as such.
-        if (toolchainContext != null) {
+        if (toolchainContextBuilder != null) {
           Set<Label> toolchainDependencyErrors =
-              toolchainContext.filterToolchainLabels(
+              toolchainContextBuilder.filterToolchainLabels(
                   Iterables.transform(cvce.getRootCauses(), Cause::getLabel));
           if (!toolchainDependencyErrors.isEmpty()) {
             env.getListener()
@@ -362,15 +371,14 @@ public final class ConfiguredTargetFunction implements SkyFunction {
               e.getMessage(),
               configuration,
               e.getCauses()));
-    } catch (ToolchainContextException e) {
+    } catch (ToolchainException e) {
       // We need to throw a ConfiguredValueCreationException, so either find one or make one.
       ConfiguredValueCreationException cvce;
       if (e.getCause() instanceof ConfiguredValueCreationException) {
         cvce = (ConfiguredValueCreationException) e.getCause();
       } else {
         cvce =
-            new ConfiguredValueCreationException(
-                e.getCause().getMessage(), target.getLabel(), configuration);
+            new ConfiguredValueCreationException(e.getMessage(), target.getLabel(), configuration);
       }
 
       env.getListener()
@@ -378,7 +386,7 @@ public final class ConfiguredTargetFunction implements SkyFunction {
               Event.error(
                   String.format(
                       "While resolving toolchains for target %s: %s",
-                      target.getLabel(), e.getCause().getMessage())));
+                      target.getLabel(), e.getMessage())));
       throw new ConfiguredTargetFunctionException(cvce);
     } finally {
       cpuBoundSemaphore.release();
@@ -416,7 +424,7 @@ public final class ConfiguredTargetFunction implements SkyFunction {
    * @param ctgValue the label and the configuration of the node
    * @param aspects
    * @param configConditions the configuration conditions for evaluating the attributes of the node
-   * @param toolchainContext context information for required toolchains
+   * @param toolchainLabels labels of required toolchain dependencies
    * @param ruleClassProvider rule class provider for determining the right configuration fragments
    *     to apply to deps
    * @param hostConfiguration the host configuration. There's a noticeable performance hit from
@@ -433,7 +441,7 @@ public final class ConfiguredTargetFunction implements SkyFunction {
       TargetAndConfiguration ctgValue,
       Iterable<Aspect> aspects,
       ImmutableMap<Label, ConfigMatchingProvider> configConditions,
-      @Nullable ToolchainContext toolchainContext,
+      ImmutableSet<Label> toolchainLabels,
       RuleClassProvider ruleClassProvider,
       BuildConfiguration hostConfiguration,
       @Nullable NestedSetBuilder<Package> transitivePackagesForPackageRootResolution,
@@ -450,9 +458,7 @@ public final class ConfiguredTargetFunction implements SkyFunction {
               hostConfiguration,
               aspects,
               configConditions,
-              toolchainContext == null
-                  ? ImmutableSet.of()
-                  : toolchainContext.resolvedToolchainLabels(),
+              toolchainLabels,
               transitiveRootCauses,
               defaultBuildOptions,
               ((ConfiguredRuleClassProvider) ruleClassProvider).getTrimmingTransitionFactory());
