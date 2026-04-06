@@ -767,6 +767,11 @@ public class TestRunnerAction extends AbstractAction
       env.put("SPLIT_COVERAGE_POST_PROCESSING", splitCoveragePostProcessing ? "1" : "0");
       env.put("IS_COVERAGE_SPAWN", "0");
     }
+
+    // DO NOT SUBMIT
+    for (Map.Entry<String, String> entry : getExecutionInfo().entrySet()) {
+      env.put("EXEC_INFO_" + entry.getKey(), entry.getValue());
+    }
   }
 
   /**
