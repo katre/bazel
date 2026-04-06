@@ -420,6 +420,7 @@ public final class TestActionBuilder {
                 && testConfiguration.cancelConcurrentTests();
 
         boolean splitCoveragePostProcessing = testConfiguration.splitCoveragePostProcessing();
+        TestTargetProperties runTestProperties = testProperties.filterForRun(run, runsPerTest);
         // TODO(b/234923262): Take exec_group into consideration when selecting sh tools
         TestRunnerAction testRunnerAction =
             new TestRunnerAction(
@@ -434,7 +435,7 @@ public final class TestActionBuilder {
                 coverageArtifact,
                 coverageDirectory,
                 undeclaredOutputsDir,
-                testProperties,
+                runTestProperties,
                 runfilesSupport
                     .getActionEnvironment()
                     .withAdditionalVariables(extraTestEnv, extraInheritedEnv),
