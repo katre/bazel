@@ -20,6 +20,7 @@ import static com.google.devtools.build.lib.packages.BuildType.LABEL;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.devtools.build.lib.actions.ActionInput;
 import com.google.devtools.build.lib.actions.ActionOwner;
@@ -212,8 +213,12 @@ public final class TestActionBuilder {
           PrerequisiteArtifacts.nestedSet(ruleContext, "$test_runtime");
       inputsBuilder.addTransitive(testRuntime);
     }
+
+    ActionOwner actionOwner =
+        testConfiguration.useTargetPlatformForTests() ? getTestActionOwner() : getOwner();
+    ImmutableMap<String, String> testExecProperties = actionOwner.getExecProperties();
     TestTargetProperties testProperties =
-        new TestTargetProperties(ruleContext, executionRequirements);
+        new TestTargetProperties(ruleContext, executionRequirements, testExecProperties);
 
     // If the test rule does not provide InstrumentedFilesProvider, there's not much that we can do.
     final boolean collectCodeCoverage = config.isCodeCoverageEnabled()
@@ -371,9 +376,6 @@ public final class TestActionBuilder {
     } else {
       testRunfilesSupplier = runfilesSupport;
     }
-
-    ActionOwner actionOwner =
-        testConfiguration.useTargetPlatformForTests() ? getTestActionOwner() : getOwner();
 
     // Use 1-based indices for user friendliness.
     for (int shard = 0; shard < shardRuns; shard++) {

@@ -77,7 +77,10 @@ public class TestTargetProperties {
    * Creates test target properties instance. Constructor expects that it will be called only for
    * test configured targets.
    */
-  TestTargetProperties(RuleContext ruleContext, ExecutionInfo executionRequirements) {
+  TestTargetProperties(
+      RuleContext ruleContext,
+      ExecutionInfo executionRequirements,
+      ImmutableMap<String, String> testExecProperties) {
     Rule rule = ruleContext.getRule();
 
     Preconditions.checkState(TargetUtils.isTestRule(rule));
@@ -91,6 +94,7 @@ public class TestTargetProperties {
 
     Map<String, String> executionInfo = Maps.newLinkedHashMap();
     executionInfo.putAll(TargetUtils.getExecutionInfo(rule));
+    executionInfo.putAll(testExecProperties);
 
     boolean incompatibleExclusiveTestSandboxed = false;
 
