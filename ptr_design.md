@@ -33,7 +33,7 @@ The current API for Starlark tests is very simple: a test rule creates an execut
 
 To gate the new feature, we will add a new flag, `--enable_persistent_test_runners`, to tell Bazel that persistent test runners should be enabled if the test rule cooperates. If the flag is disabled, then even if the test rule attempts to use the new APIs, tests will be run one-at-a-time.
 
-The flag will be a regexp filter matching test rule names, allowing fine-grained control over which test rules can use the new API. For example, `--enable_persistent_test_runners=.*,-go_test` means that persistent runners are enabled for all test rules except `go_test`. The filter will work by directly matching against the rule name (and, as such, will ignore any macros used to define tests).
+The flag will be a regexp filter matching worker key mnemonics, allowing fine-grained control over which persistent test workers can be used. For example, `--enable_persistent_test_runners=.*,-GoTestWorker` means that persistent runners are enabled for all worker mnemonics except `GoTestWorker`. The filter will work by directly matching against the `WorkerKeyMnemonic` field from the `PersistentTestInfo` provider. If multiple test rules share the same `WorkerKeyMnemonic`, they will all be controlled by the same flag setting. If a test rule does not provide a `WorkerKeyMnemonic` or provides an empty string, persistent test runners will not be enabled for that rule regardless of the flag value.
 
 Regardless of this flag setting, if the test rule cannot support persistent test runners, the tests will continue to execute using the older non-persistent system.
 
