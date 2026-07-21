@@ -196,6 +196,7 @@ java_library(
         ":test/coverage_configuration",
         ":test/execution_info",
         ":test/instrumented_files_info",
+        ":test/persistent_test_info",
         ":test/test_configuration",
         ":test/test_sharding_strategy",
         ":toolchain_collection",
@@ -1984,6 +1985,24 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/collect/nestedset",
         "//src/main/java/com/google/devtools/build/lib/packages:provider",
         "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi/test",
+    ],
+)
+
+java_library(
+    name = "test/persistent_test_info",
+    srcs = ["test/PersistentTestInfo.java"],
+    deps = [
+        ":starlark/args",
+        "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/actions:artifacts",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
+        "//src/main/java/com/google/devtools/build/lib/concurrent:thread_safety",
+        "//src/main/java/com/google/devtools/build/lib/packages:provider",
+        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi",
+        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi/test",
+        "//src/main/java/com/google/devtools/build/lib/supplier",
+        "//src/main/java/net/starlark/java/eval",
+        "//third_party:guava",
     ],
 )
 

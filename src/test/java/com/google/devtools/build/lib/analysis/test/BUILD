@@ -82,6 +82,23 @@ java_test(
 )
 
 java_test(
+    name = "PersistentTestInfoTest",
+    srcs = ["PersistentTestInfoTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/analysis:starlark/args",
+        "//src/main/java/com/google/devtools/build/lib/analysis:test/persistent_test_info",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
+        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi",
+        "//src/main/java/com/google/devtools/build/lib/supplier",
+        "//src/main/java/net/starlark/java/eval",
+        "//third_party:guava",
+        "//third_party:junit4",
+        "//third_party:truth",
+    ],
+)
+
+java_test(
     name = "TestTrimmingTransitionTest",
     srcs = ["TestTrimmingTransitionTest.java"],
     deps = [
