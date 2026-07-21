@@ -42,7 +42,7 @@ Regardless of this flag setting, if the test rule cannot support persistent test
 We will define a new provider type, `PersistentTestInfo`, which test rules can return to tell Bazel whether they support persistent test runners. The provider will have the following fields:
 
 * `Multiplex`: True if the worker supports the multiplex worker protocol. The default is `false`, meaning that the worker can only handle a single request at a time.
-* `Protocol`: Either `json` or `proto`, to distinguish between the protocol format. The default is `proto`, to match the non-test persistent workers.
+* `RequiresWorkerProtocol`: Either `json` or `proto`, to distinguish between the protocol format. The default is `proto`, to match the non-test persistent workers.
 * `WorkerKeyMnemonic`: A distinct name for the worker, which can be useful if the same worker can be used for multiple types of tests.
     * Regardless of the `WorkerKeyMnemonic` value, a single worker cannot handle both test and non-test actions, and may end up with multiple instances running at once.
 * `Arguments`: A Starlark array of the test runner arguments, either Strings or `args` objects. This will be passed to the test runner for each test executed, either directly on the command line (for single-use mode) or via the worker protocol (for persistent mode).
