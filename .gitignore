@@ -1,3 +1,6 @@
+.aws
+.claude
+.claude.json
 # Ignore backup files.
 *~
 # Ignore Vim swap files.
