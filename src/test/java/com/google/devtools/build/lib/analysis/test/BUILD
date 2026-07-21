@@ -122,6 +122,19 @@ java_test(
 )
 
 java_test(
+    name = "TestConfigurationPersistentRunnersTest",
+    srcs = ["TestConfigurationPersistentRunnersTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/analysis:test/test_configuration",
+        "//src/main/java/com/google/devtools/build/lib/analysis/config:build_options",
+        "//src/main/java/com/google/devtools/build/lib/util",
+        "//third_party:guava",
+        "//third_party:junit4",
+        "//third_party:truth",
+    ],
+)
+
+java_test(
     name = "TrimTestConfigurationTest",
     srcs = ["TrimTestConfigurationTest.java"],
     deps = [

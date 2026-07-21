@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.Nullable;
 
 /** Test-related options. */
 @RequiresOptions(options = {TestConfiguration.TestOptions.class})
@@ -383,6 +384,20 @@ public class TestConfiguration extends Fragment {
         help = "If true, Bazel will allow local tests to run.")
     public abstract boolean getAllowLocalTests();
 
+    @Option(
+        name = "enable_persistent_test_runners",
+        defaultValue = "",
+        converter = RegexFilter.RegexFilterConverter.class,
+        documentationCategory = OptionDocumentationCategory.EXECUTION_STRATEGY,
+        effectTags = {OptionEffectTag.EXECUTION, OptionEffectTag.TEST_RUNNER},
+        help =
+            "Enables persistent test runners for tests that support them. Value is a regex filter "
+                + "matching worker key mnemonics. Examples: '.*' enables all persistent test "
+                + "runners; 'JavaTest' enables only JavaTest workers; '.*,-GoTest' enables all "
+                + "except GoTest. Tests without a worker key mnemonic are always enabled. "
+                + "Default is empty (disabled).")
+    public abstract RegexFilter getEnablePersistentTestRunners();
+
     @Override
     public TestOptions getNormalized() {
       TestOptions result = (TestOptions) clone();
@@ -496,6 +511,31 @@ public class TestConfiguration extends Fragment {
 
   public boolean allowLocalTests() {
     return options.getAllowLocalTests();
+  }
+
+  /** Returns the regex filter for enabling persistent test runners. */
+  public RegexFilter getEnablePersistentTestRunners() {
+    return options.getEnablePersistentTestRunners();
+  }
+
+  /**
+   * Checks if a persistent test runner with the given worker key mnemonic is enabled.
+   *
+   * @param workerKeyMnemonic The worker key mnemonic to check, or null/empty if not specified
+   * @return true if the persistent test runner should be enabled, false otherwise
+   */
+  public boolean isPersistentTestRunnerEnabled(@Nullable String workerKeyMnemonic) {
+    RegexFilter filter = options.getEnablePersistentTestRunners();
+    // If the filter is empty (default), persistent test runners are disabled for all workers
+    if (filter.toString().isEmpty()) {
+      return false;
+    }
+    // If the flag is set but no mnemonic is provided (null or empty), always enable
+    if (workerKeyMnemonic == null || workerKeyMnemonic.isEmpty()) {
+      return true;
+    }
+    // If both flag is set and mnemonic is provided, check against the filter pattern
+    return filter.isIncluded(workerKeyMnemonic);
   }
 
   /**
