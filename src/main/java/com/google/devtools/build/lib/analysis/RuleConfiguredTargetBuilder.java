@@ -36,6 +36,7 @@ import com.google.devtools.build.lib.analysis.test.AnalysisTestResultInfo;
 import com.google.devtools.build.lib.analysis.test.ExecutionInfo;
 import com.google.devtools.build.lib.analysis.test.InstrumentedFilesCollector;
 import com.google.devtools.build.lib.analysis.test.InstrumentedFilesInfo;
+import com.google.devtools.build.lib.analysis.test.PersistentTestInfo;
 import com.google.devtools.build.lib.analysis.test.TestActionBuilder;
 import com.google.devtools.build.lib.analysis.test.TestConfiguration;
 import com.google.devtools.build.lib.analysis.test.TestProvider;
@@ -496,6 +497,9 @@ public final class RuleConfiguredTargetBuilder {
             .addTools(additionalTestActionTools.build())
             .setExecutionRequirements(
                 (ExecutionInfo) providersBuilder.getProvider(ExecutionInfo.PROVIDER.getKey()))
+            .setPersistentTestInfo(
+                (PersistentTestInfo)
+                    providersBuilder.getProvider(PersistentTestInfo.PROVIDER.getKey()))
             .build();
     return new TestProvider(testParams);
   }

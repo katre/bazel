@@ -26,8 +26,11 @@ import com.google.common.collect.Sets;
 import com.google.devtools.build.lib.actions.ActionExecutionContext;
 import com.google.devtools.build.lib.actions.ActionOwner;
 import com.google.devtools.build.lib.actions.Artifact;
+import com.google.devtools.build.lib.actions.CommandLineLimits;
 import com.google.devtools.build.lib.actions.CommandLineExpansionException;
+import com.google.devtools.build.lib.actions.CommandLines.ExpandedCommandLines;
 import com.google.devtools.build.lib.actions.ExecException;
+import com.google.devtools.build.lib.actions.PathMapper;
 import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.analysis.config.PerLabelOptions;
 import com.google.devtools.build.lib.analysis.config.RunUnder;
@@ -239,6 +242,23 @@ public abstract class TestStrategy implements TestActionContext {
     // Do not use getCallablePathStringForOs as tw.exe expects a path with forward slashes.
     args.add(execSettings.getExecutable().getRunfilesPath().getCallablePathString());
     Iterables.addAll(args, execSettings.getArgs().arguments());
+
+    // Check if test uses PersistentTestInfo with custom arguments
+    PersistentTestInfo persistentTestInfo = testAction.getPersistentTestInfo();
+    if (persistentTestInfo != null) {
+      // Expand arguments from PersistentTestInfo provider
+      ExpandedCommandLines expanded =
+          persistentTestInfo
+              .getCommandLines()
+              .expand(
+                  /* inputMetadataProvider= */ null, // Test args don't reference artifacts
+                  testAction.getPrimaryOutput().getExecPath(), // Base path for param files
+                  PathMapper.NOOP, // Tests don't use path mapping
+                  CommandLineLimits.UNLIMITED); // Tests rarely hit limits
+
+      args.addAll(expanded.arguments());
+    }
+
     return ImmutableList.copyOf(args);
   }
 

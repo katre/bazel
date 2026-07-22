@@ -83,6 +83,7 @@ public final class TestActionBuilder {
   private Artifact executable;
   private ExecutionInfo executionRequirements;
   private InstrumentedFilesInfo instrumentedFiles;
+  private PersistentTestInfo persistentTestInfo;
 
   public TestActionBuilder(RuleContext ruleContext) {
     this.ruleContext = ruleContext;
@@ -141,6 +142,12 @@ public final class TestActionBuilder {
   @CanIgnoreReturnValue
   public TestActionBuilder setExecutionRequirements(@Nullable ExecutionInfo executionRequirements) {
     this.executionRequirements = executionRequirements;
+    return this;
+  }
+
+  @CanIgnoreReturnValue
+  public TestActionBuilder setPersistentTestInfo(@Nullable PersistentTestInfo persistentTestInfo) {
+    this.persistentTestInfo = persistentTestInfo;
     return this;
   }
 
@@ -467,7 +474,8 @@ public final class TestActionBuilder {
                 cancelConcurrentTests,
                 splitCoveragePostProcessing,
                 lcovMergerFilesToRun,
-                unrunnableReason);
+                unrunnableReason,
+                persistentTestInfo);
 
         testOutputs.addAll(testRunnerAction.getSpawnOutputs());
         testOutputs.addAll(testRunnerAction.getOutputs());

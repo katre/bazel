@@ -170,6 +170,7 @@ public class TestRunnerAction extends AbstractAction
 
   private final boolean splitCoveragePostProcessing;
   private final NestedSet<Artifact> lcovMergerFilesToRun;
+  @Nullable private final PersistentTestInfo persistentTestInfo;
 
   /**
    * If not null, the reason why this test can't be run in the current build, to be reported when
@@ -221,7 +222,8 @@ public class TestRunnerAction extends AbstractAction
       CancelConcurrentTests cancelConcurrentTests,
       boolean splitCoveragePostProcessing,
       NestedSet<Artifact> lcovMergerFilesToRun,
-      @Nullable String unrunnableReason) {
+      @Nullable String unrunnableReason,
+      @Nullable PersistentTestInfo persistentTestInfo) {
     super(
         owner,
         inputs,
@@ -286,6 +288,7 @@ public class TestRunnerAction extends AbstractAction
     this.splitCoveragePostProcessing = splitCoveragePostProcessing;
     this.lcovMergerFilesToRun = lcovMergerFilesToRun;
     this.unrunnableReason = unrunnableReason;
+    this.persistentTestInfo = persistentTestInfo;
 
     // Mark all possible test outputs for deletion before test execution.
     // TestRunnerAction potentially can create many more non-declared outputs - xml output, coverage
@@ -1010,6 +1013,26 @@ public class TestRunnerAction extends AbstractAction
   /** Returns the workspace name. */
   public String getRunfilesPrefix() {
     return workspaceName;
+  }
+
+  /**
+   * Returns the PersistentTestInfo provider if the test rule provided it, or null if the test
+   * should run in non-persistent mode.
+   */
+  @Nullable
+  public PersistentTestInfo getPersistentTestInfo() {
+    return persistentTestInfo;
+  }
+
+  /**
+   * Returns true if this test should use a persistent test runner based on: 1. The test rule
+   * provided PersistentTestInfo 2. The --enable_persistent_test_runners flag allows it (based on
+   * worker key mnemonic)
+   */
+  public boolean usesPersistentTestRunner() {
+    return persistentTestInfo != null
+        && testConfiguration.isPersistentTestRunnerEnabled(
+            persistentTestInfo.getWorkerKeyMnemonic());
   }
 
   @Override
