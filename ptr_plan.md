@@ -323,9 +323,7 @@ private TestRunnerSpawn createPersistentTestRunnerSpawn(...) {
   }
 
   // Add per-test environment as arguments (since WorkRequest doesn't have env field)
-  for (Map.Entry<String, String> entry : perTestEnv.entrySet()) {
-    workRequestArgs.add("--test_env:" + entry.getKey() + "=" + entry.getValue());
-  }
+  // Add to WorkRequest.environment
 
   // Create spawn with worker args
   ImmutableList<String> spawnArgs = ImmutableList.of(
@@ -348,8 +346,6 @@ private TestRunnerSpawn createPersistentTestRunnerSpawn(...) {
 }
 ```
 
-**Key design decision**: Per-test environment variables passed as `--test_env:VAR=value` arguments (WorkRequest proto doesn't have environment field). Worker binary must parse these.
-
 ### Step 3C: Worker Integration
 
 **`src/main/java/com/google/devtools/build/lib/worker/WorkerSpawnRunner.java`**
@@ -357,7 +353,7 @@ private TestRunnerSpawn createPersistentTestRunnerSpawn(...) {
 Modify `canExec` (line 135) to accept test spawns with worker execution requirements.
 
 In `exec` method, when creating WorkRequest:
-- Extract test-specific arguments from spawn (including `--test_env:` args)
+- Extract test-specific arguments from spawn
 - Set `WorkRequest.arguments` to these args
 - Worker binary receives arguments, parses test environment, executes test
 
@@ -410,7 +406,6 @@ Create test scenario:
 2. Create worker binary (Python script):
    - Accepts `--persistent_worker` flag
    - Reads WorkRequest JSON from stdin
-   - Parses `--test_env:VAR=value` arguments
    - Executes test
    - Writes WorkResponse JSON to stdout
    - In non-persistent mode: executes once and exits
@@ -474,7 +469,7 @@ After implementation:
 
 ## Open Design Questions
 
-**Test Environment Variables**: Current approach passes per-test env vars as `--test_env:VAR=value` arguments. Alternative: Extend WorkRequest proto with `map<string, string> environment` field. Recommendation: Start with arguments approach, consider proto extension if needed.
+**Test Environment Variables**: Extend WorkRequest proto with `map<string, string> environment` field. Recommendation: Start with arguments approach, consider proto extension if needed.
 
 **Sharding**: Single worker can handle multiple shards (receives TEST_SHARD_INDEX per request) or run separate worker per shard. Recommendation: Single worker, more efficient.
 

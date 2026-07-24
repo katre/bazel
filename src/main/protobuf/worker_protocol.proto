@@ -70,6 +70,11 @@ message WorkRequest {
   // will be placed/must be written relative to this directory. The worker
   // implementation is responsible for resolving the file paths.
   string sandbox_dir = 6;
+
+  // Environment variables that should be merged with the worker's
+  // base environment. These override any existing environment variables with
+  // the same name.
+  map<string, string> environment = 7;
 }
 
 // The worker sends this message to Blaze when it finished its work on the
