@@ -418,9 +418,14 @@ public final class RunfilesSupport {
 
   private static Artifact createRunfilesInputManifestArtifact(
       RuleContext context, Artifact owningExecutable) {
+    // For forwarded executables (owned by a different rule), use the rule's own label for naming
+    // the input manifest to avoid conflicts with the original rule's manifest.
+    boolean isExecutableForwarded = !owningExecutable.getArtifactOwner().equals(context.getOwner());
     PathFragment relativePath =
-        owningExecutable.getOutputDirRelativePath(
-            context.getConfiguration().isSiblingRepositoryLayout());
+        isExecutableForwarded
+            ? context.getPackageDirectory().getRelative(context.getLabel().getName())
+            : owningExecutable.getOutputDirRelativePath(
+                context.getConfiguration().isSiblingRepositoryLayout());
     String basename = relativePath.getBaseName();
     PathFragment inputManifestPath = relativePath.replaceName(basename + INPUT_MANIFEST_EXT);
     return context.getDerivedArtifact(inputManifestPath, context.getBinDirectory());
@@ -467,13 +472,25 @@ public final class RunfilesSupport {
 
   private static Artifact declareRunfilesTreeArtifact(
       RuleContext ruleContext, Artifact owningExecutable) {
-    PathFragment executableRootRelativePath = owningExecutable.getRootRelativePath();
+    // For forwarded executables (owned by a different rule), use the rule's own label for naming
+    // the runfiles tree to avoid conflicts with the original rule's runfiles tree.
+    boolean isExecutableForwarded =
+        !owningExecutable.getArtifactOwner().equals(ruleContext.getOwner());
+    PathFragment executableRootRelativePath;
+    ArtifactRoot root;
+    if (isExecutableForwarded) {
+      // Use the rule's own label for the path
+      executableRootRelativePath =
+          ruleContext.getPackageDirectory().getRelative(ruleContext.getLabel().getName());
+      root = ruleContext.getBinDirectory();
+    } else {
+      executableRootRelativePath = owningExecutable.getRootRelativePath();
+      root = owningExecutable.getRoot();
+    }
     PathFragment runfilesRootRelativePath =
         executableRootRelativePath.replaceName(
             executableRootRelativePath.getBaseName() + RUNFILES_DIR_EXT);
-    return ruleContext
-        .getAnalysisEnvironment()
-        .getRunfilesArtifact(runfilesRootRelativePath, owningExecutable.getRoot());
+    return ruleContext.getAnalysisEnvironment().getRunfilesArtifact(runfilesRootRelativePath, root);
   }
 
   public static void createRunfilesTreeArtifactAction(
@@ -712,8 +729,13 @@ public final class RunfilesSupport {
       return null;
     }
 
+    // For forwarded executables (owned by a different rule), use the rule's own label for naming
+    // auxiliary files to avoid conflicts with the original rule's files.
+    boolean isExecutableForwarded =
+        owningExecutable != null
+            && !owningExecutable.getArtifactOwner().equals(ruleContext.getOwner());
     PathFragment executablePath =
-        (owningExecutable != null)
+        (owningExecutable != null && !isExecutableForwarded)
             ? owningExecutable.getOutputDirRelativePath(
                 ruleContext.getConfiguration().isSiblingRepositoryLayout())
             : ruleContext.getPackageDirectory().getRelative(ruleContext.getLabel().getName());

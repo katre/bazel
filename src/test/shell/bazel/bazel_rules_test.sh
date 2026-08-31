@@ -500,6 +500,57 @@ EOF
   assert_contains "hello world" bazel-bin/pkg/hello_gen.txt
 }
 
+function test_forwarded_executable() {
+  add_rules_cc "MODULE.bazel"
+  mkdir -p pkg
+  cat <<'EOF' >pkg/BUILD
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load(":rules.bzl", "forwarded_exec")
+
+cc_binary(
+    name = "main",
+    srcs = ["main.cc"],
+)
+
+forwarded_exec(
+    name = "forwarded",
+    actual = ":main",
+)
+EOF
+
+  cat <<'EOF' >pkg/main.cc
+#include <string>
+#include <iostream>
+
+int main() {
+  std::cout << std::string("hello world") << std::endl;
+}
+EOF
+
+  cat >pkg/rules.bzl <<'EOF'
+def _forwarded_exec_impl(ctx):
+    actual = ctx.executable.actual
+    return DefaultInfo(
+        executable = actual,
+    )
+
+forwarded_exec = rule(
+    implementation = _forwarded_exec_impl,
+    attrs = {
+        "actual": attr.label(
+            executable = True,
+            cfg = "target",
+        ),
+    },
+    executable = True,
+)
+EOF
+
+  bazel run //pkg:forwarded >$TEST_log 2>&1 || fail "Should build"
+  expect_log "hello world"
+}
+
 function test_starlark_test_with_test_environment() {
   mkdir pkg
   cat >pkg/BUILD <<'EOF'

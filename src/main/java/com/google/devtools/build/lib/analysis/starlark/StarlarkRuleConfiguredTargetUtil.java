@@ -15,6 +15,7 @@ package com.google.devtools.build.lib.analysis.starlark;
 
 import com.google.common.base.Preconditions;
 import com.google.devtools.build.lib.actions.ActionConflictException;
+import com.google.devtools.build.lib.actions.ActionLookupKey;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.analysis.ActionsProvider;
 import com.google.devtools.build.lib.analysis.CachingAnalysisEnvironment;
@@ -41,6 +42,7 @@ import com.google.devtools.build.lib.packages.StarlarkProviderIdentifier;
 import com.google.devtools.build.lib.packages.StructProvider;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.packages.Type;
+import com.google.devtools.build.lib.skyframe.config.BuildConfigurationKey;
 import com.google.errorprone.annotations.FormatMethod;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -375,11 +377,31 @@ public final class StarlarkRuleConfiguredTargetUtil {
     Runfiles defaultRunfiles = defaultInfo == null ? null : defaultInfo.getDefaultRunfiles();
     Artifact executable = defaultInfo == null ? null : defaultInfo.getExecutable();
 
-    if (executable != null && !executable.getArtifactOwner().equals(context.getOwner())) {
-      throw errorWithLoc(
-          locForError,
-          "'executable' provided by an executable rule '%s' should be created by the same rule.",
-          context.getRule().getRuleClass());
+    // Check if executable is forwarded from a different rule
+    // Test rules are allowed to forward executables, so skip validation for them
+    boolean isTestRule = TargetUtils.isTestRuleName(context.getRule().getRuleClass());
+    if (executable != null
+        && !isTestRule
+        && !executable.getArtifactOwner().equals(context.getOwner())) {
+      // Forwarded executable detected - check if it's in the same configuration
+      ActionLookupKey executableOwner = (ActionLookupKey) executable.getArtifactOwner();
+      BuildConfigurationKey executableConfigKey = executableOwner.getConfigurationKey();
+      BuildConfigurationKey currentConfigKey = context.getOwner().getConfigurationKey();
+
+      // Allow forwarding only if configurations match (same configuration or both null)
+      boolean sameConfiguration =
+          (executableConfigKey == null && currentConfigKey == null)
+              || (executableConfigKey != null && executableConfigKey.equals(currentConfigKey));
+
+      if (!sameConfiguration) {
+        throw errorWithLoc(
+            locForError,
+            "'executable' provided by an executable rule '%s' is in a different configuration"
+                + " (e.g., due to cfg='exec' or a custom transition). Use cfg='target' for the"
+                + " attribute to keep the executable in the same configuration, or create the"
+                + " executable in this rule instead.",
+            context.getRule().getRuleClass());
+      }
     }
 
     boolean isExecutable = context.getRule().getRuleClassObject().isExecutableStarlark();

@@ -1383,4 +1383,150 @@ EOF
   expect_not_log "my_rule is being analyzed"
 }
 
+function test_forwarded_executable_with_target_cfg() {
+  local -r pkg="pkg${LINENO}"
+  mkdir -p "${pkg}"
+
+  # Create a simple binary rule
+  cat > "${pkg}/binary.bzl" <<'EOF'
+def _binary_impl(ctx):
+    exe = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.write(
+        output = exe,
+        content = "#!/bin/bash\necho 'Test passed!'\nexit 0",
+        is_executable = True,
+    )
+    return [DefaultInfo(executable = exe, files = depset([exe]))]
+
+simple_binary = rule(
+    implementation = _binary_impl,
+    executable = True,
+)
+EOF
+
+  # Create a test rule that forwards the executable with cfg='target'
+  cat > "${pkg}/test.bzl" <<'EOF'
+def _forwarded_test_impl(ctx):
+    return [DefaultInfo(
+        executable = ctx.executable.actual,
+        runfiles = ctx.runfiles(files = [ctx.executable.actual]),
+    )]
+
+forwarded_test = rule(
+    implementation = _forwarded_test_impl,
+    attrs = {
+        'actual': attr.label(
+            executable = True,
+            cfg = 'target',
+        ),
+    },
+    test = True,
+)
+EOF
+
+  cat > "${pkg}/BUILD" <<'EOF'
+load(':binary.bzl', 'simple_binary')
+load(':test.bzl', 'forwarded_test')
+
+simple_binary(
+    name = 'test_script',
+)
+
+forwarded_test(
+    name = 'forwarded_test',
+    actual = ':test_script',
+)
+EOF
+
+  bazel test "//${pkg}:forwarded_test" --test_output=all >& $TEST_log \
+    || fail "Test with forwarded executable (cfg='target') should pass"
+  expect_log "Test passed!"
+}
+
+function test_forwarded_executable_with_exec_cfg_fails() {
+  local -r pkg="pkg${LINENO}"
+  mkdir -p "${pkg}"
+
+  # Create a simple binary rule
+  cat > "${pkg}/binary.bzl" <<'EOF'
+def _binary_impl(ctx):
+    exe = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.write(
+        output = exe,
+        content = "#!/bin/bash\necho 'Test passed!'\nexit 0",
+        is_executable = True,
+    )
+    return [DefaultInfo(executable = exe, files = depset([exe]))]
+
+simple_binary = rule(
+    implementation = _binary_impl,
+    executable = True,
+)
+EOF
+
+  # Create an executable rule (NOT a test rule) that tries to forward with cfg='exec'
+  cat > "${pkg}/forwarding.bzl" <<'EOF'
+def _forwarded_exec_impl(ctx):
+    return [DefaultInfo(
+        executable = ctx.executable.actual,
+        runfiles = ctx.runfiles(files = [ctx.executable.actual]),
+    )]
+
+forwarded_exec = rule(
+    implementation = _forwarded_exec_impl,
+    attrs = {
+        'actual': attr.label(
+            executable = True,
+            cfg = 'exec',
+        ),
+    },
+    executable = True,  # This is an executable rule, not a test rule
+)
+EOF
+
+  # Create a wrapper test that uses the forwarding executable
+  cat > "${pkg}/test_wrapper.bzl" <<'EOF'
+def _wrapper_test_impl(ctx):
+    return [DefaultInfo(
+        executable = ctx.executable.actual,
+        runfiles = ctx.runfiles(files = [ctx.executable.actual]),
+    )]
+
+wrapper_test = rule(
+    implementation = _wrapper_test_impl,
+    attrs = {
+        'actual': attr.label(
+            executable = True,
+            cfg = 'target',
+        ),
+    },
+    test = True,
+)
+EOF
+
+  cat > "${pkg}/BUILD" <<'EOF'
+load(':binary.bzl', 'simple_binary')
+load(':forwarding.bzl', 'forwarded_exec')
+load(':test_wrapper.bzl', 'wrapper_test')
+
+simple_binary(
+    name = 'test_script',
+)
+
+forwarded_exec(
+    name = 'forwarded_with_exec',
+    actual = ':test_script',
+)
+
+wrapper_test(
+    name = 'forwarded_test',
+    actual = ':forwarded_with_exec',
+)
+EOF
+
+  bazel test "//${pkg}:forwarded_test" >& $TEST_log && fail "Expected test with cfg='exec' to fail"
+  expect_log "is in a different configuration"
+  expect_log "cfg='target'"
+}
+
 run_suite "bazel test tests"

@@ -2616,8 +2616,128 @@ public class StarlarkIntegrationTest extends BuildViewTestCase {
     reporter.removeHandler(failFastHandler);
     getConfiguredTarget("//src:r_tools");
     assertContainsEvent(
-        "/workspace/src/rulez.bzl:2:23: 'executable' provided by an executable"
-            + " rule 'r' should be created by the same rule.");
+        "'executable' provided by an executable rule 'r' is in a different configuration");
+  }
+
+  @Test
+  public void testExecutableFromSameConfigurationIsAllowed() throws Exception {
+    scratch.file(
+        "pkg/binary.bzl",
+        """
+        def _binary_impl(ctx):
+            exe = ctx.actions.declare_file(ctx.label.name)
+            ctx.actions.write(
+                output = exe,
+                content = "#!/bin/bash\\necho test",
+                is_executable = True,
+            )
+            return [DefaultInfo(executable = exe, files = depset([exe]))]
+
+        simple_binary = rule(
+            implementation = _binary_impl,
+            executable = True,
+        )
+        """);
+
+    scratch.file(
+        "pkg/forwarding.bzl",
+        """
+        def _forwarding_impl(ctx):
+            return [DefaultInfo(
+                executable = ctx.executable.actual,
+                files = depset([ctx.executable.actual]),
+            )]
+
+        forwarding_binary = rule(
+            implementation = _forwarding_impl,
+            attrs = {
+                'actual': attr.label(
+                    executable = True,
+                    cfg = 'target',
+                ),
+            },
+            executable = True,
+        )
+        """);
+
+    scratch.file(
+        "pkg/BUILD",
+        """
+        load(':binary.bzl', 'simple_binary')
+        load(':forwarding.bzl', 'forwarding_binary')
+
+        simple_binary(
+            name = 'original',
+        )
+
+        forwarding_binary(
+            name = 'forwarded',
+            actual = ':original',
+        )
+        """);
+    getConfiguredTarget("//pkg:forwarded");
+    assertNoEvents();
+  }
+
+  @Test
+  public void testTestRuleCanForwardExecutable() throws Exception {
+    scratch.file(
+        "pkg/binary.bzl",
+        """
+        def _binary_impl(ctx):
+            exe = ctx.actions.declare_file(ctx.label.name)
+            ctx.actions.write(
+                output = exe,
+                content = "#!/bin/bash\\nexit 0",
+                is_executable = True,
+            )
+            return [DefaultInfo(executable = exe, files = depset([exe]))]
+
+        simple_binary = rule(
+            implementation = _binary_impl,
+            executable = True,
+        )
+        """);
+
+    scratch.file(
+        "pkg/test.bzl",
+        """
+        def _forwarded_test_impl(ctx):
+            return [DefaultInfo(
+                executable = ctx.executable.actual,
+                runfiles = ctx.runfiles(files = [ctx.executable.actual]),
+            )]
+
+        forwarded_test = rule(
+            implementation = _forwarded_test_impl,
+            attrs = {
+                'actual': attr.label(
+                    executable = True,
+                    cfg = 'target',
+                ),
+            },
+            test = True,
+        )
+        """);
+
+    scratch.file(
+        "pkg/BUILD",
+        """
+        load(':binary.bzl', 'simple_binary')
+        load(':test.bzl', 'forwarded_test')
+
+        simple_binary(
+            name = 'test_script',
+        )
+
+        forwarded_test(
+            name = 'forwarded_test',
+            actual = ':test_script',
+        )
+        """);
+
+    getConfiguredTarget("//pkg:forwarded_test");
+    assertNoEvents();
   }
 
   @Test
