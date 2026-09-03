@@ -111,6 +111,7 @@ public class TestRunnerAction extends AbstractAction
 
   private static final GoogleLogger logger = GoogleLogger.forEnclosingClass();
 
+  private final NestedSet<Artifact> tools;
   private final Artifact runfilesTree;
   private final Artifact testSetupScript;
   private final Artifact testXmlGeneratorScript;
@@ -199,6 +200,7 @@ public class TestRunnerAction extends AbstractAction
   TestRunnerAction(
       ActionOwner owner,
       NestedSet<Artifact> inputs,
+      NestedSet<Artifact> tools,
       Artifact runfilesTree,
       Artifact testSetupScript, // Must be in inputs
       Artifact testXmlGeneratorScript, // Must be in inputs
@@ -236,6 +238,7 @@ public class TestRunnerAction extends AbstractAction
             coverageDirectory,
             undeclaredOutputsDir));
     Preconditions.checkState((collectCoverageScript == null) == (coverageArtifact == null));
+    this.tools = tools;
     this.runfilesTree = runfilesTree;
     this.testSetupScript = testSetupScript;
     this.testXmlGeneratorScript = testXmlGeneratorScript;
@@ -351,6 +354,11 @@ public class TestRunnerAction extends AbstractAction
 
   public Artifact getRunfilesTree() {
     return runfilesTree;
+  }
+
+  @Override
+  public NestedSet<Artifact> getTools() {
+    return tools;
   }
 
   @Override
@@ -1144,7 +1152,8 @@ public class TestRunnerAction extends AbstractAction
 
   @Override
   public List<String> getArguments() throws CommandLineExpansionException, InterruptedException {
-    return TestStrategy.expandedArgsFromAction(this);
+    return TestStrategy.expandedArgsFromAction(this, /* actionExecutionContext= */ null)
+        .arguments();
   }
 
   @Override

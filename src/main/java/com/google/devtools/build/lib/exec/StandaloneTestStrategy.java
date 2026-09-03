@@ -41,6 +41,7 @@ import com.google.devtools.build.lib.actions.SpawnMetrics;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.TestExecException;
 import com.google.devtools.build.lib.analysis.actions.SpawnAction;
+import com.google.devtools.build.lib.analysis.test.PersistentTestInfo;
 import com.google.devtools.build.lib.analysis.test.TestAttempt;
 import com.google.devtools.build.lib.analysis.test.TestResult;
 import com.google.devtools.build.lib.analysis.test.TestRunnerAction;
@@ -49,6 +50,7 @@ import com.google.devtools.build.lib.analysis.test.TestStrategy;
 import com.google.devtools.build.lib.buildeventstream.BuildEventStreamProtos;
 import com.google.devtools.build.lib.buildeventstream.BuildEventStreamProtos.TestResult.ExecutionInfo;
 import com.google.devtools.build.lib.buildeventstream.TestFileNameConstants;
+import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.events.Reporter;
@@ -125,6 +127,30 @@ public class StandaloneTestStrategy extends TestStrategy {
     executionInfo.put(
         ExecutionRequirements.TIMEOUT, Long.toString(action.getTimeout().toSeconds()));
 
+    // Add worker execution requirements if test uses PersistentTestInfo
+    if (action.usesPersistentTestRunner()) {
+      PersistentTestInfo persistentTestInfo = action.getPersistentTestInfo();
+      if (persistentTestInfo != null) {
+        // Enable worker mode (multiplex or single-worker)
+        if (persistentTestInfo.getMultiplex()) {
+          executionInfo.put(ExecutionRequirements.SUPPORTS_MULTIPLEX_WORKERS, "1");
+        } else {
+          executionInfo.put(ExecutionRequirements.SUPPORTS_WORKERS, "1");
+        }
+
+        // Set the required worker protocol (proto or json)
+        executionInfo.put(
+            ExecutionRequirements.REQUIRES_WORKER_PROTOCOL,
+            persistentTestInfo.getRequiresWorkerProtocol());
+
+        // Set worker key mnemonic if specified (for flag-based filtering)
+        if (persistentTestInfo.getWorkerKeyMnemonic() != null) {
+          executionInfo.put(
+              ExecutionRequirements.WORKER_KEY_MNEMONIC, persistentTestInfo.getWorkerKeyMnemonic());
+        }
+      }
+    }
+
     SimpleSpawn.LocalResourcesSupplier localResourcesSupplier =
         () ->
             action
@@ -132,14 +158,18 @@ public class StandaloneTestStrategy extends TestStrategy {
                 .getLocalResourceUsage(
                     action.getOwner().getLabel(), executionOptions.usingLocalTestJobs());
 
+    // Get expanded args with any paramfiles
+    TestStrategy.ExpandedTestArgs expandedArgs = getArgs(action, actionExecutionContext);
+
     Spawn spawn =
         new SimpleSpawn(
             action,
-            getArgs(action),
+            expandedArgs.arguments(),
             ImmutableMap.copyOf(testEnvironment),
             ImmutableMap.copyOf(executionInfo),
-            SpawnInputs.of(action.getInputs()),
-            NestedSetBuilder.emptySet(Order.STABLE_ORDER),
+            // Add paramfiles to spawn inputs so they can be materialized
+            SpawnInputs.of(action.getInputs(), expandedArgs.paramFiles()),
+            action.getTools(),
             ImmutableSet.copyOf(action.getSpawnOutputs()),
             /* mandatoryOutputs= */ ImmutableSet.of(),
             localResourcesSupplier);

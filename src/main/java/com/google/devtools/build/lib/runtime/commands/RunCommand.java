@@ -824,7 +824,7 @@ public class RunCommand implements BlazeCommand {
 
     ImmutableList<String> testArgs;
     try {
-      testArgs = TestStrategy.getArgs(testAction);
+      testArgs = TestStrategy.getArgs(testAction, /* actionExecutionContext= */ null).arguments();
     } catch (ExecException e) {
       throw new RunCommandException(
           reportAndCreateFailureResult(

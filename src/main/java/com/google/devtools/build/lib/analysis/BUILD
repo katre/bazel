@@ -121,6 +121,7 @@ java_library(
         "test/CoverageCommon.java",
         "test/InstrumentedFileManifestAction.java",
         "test/InstrumentedFilesCollector.java",
+        "test/PersistentTestInfo.java",
         "test/TestActionBuilder.java",
         "test/TestActionContext.java",
         "test/TestAttempt.java",
@@ -196,7 +197,6 @@ java_library(
         ":test/coverage_configuration",
         ":test/execution_info",
         ":test/instrumented_files_info",
-        ":test/persistent_test_info",
         ":test/test_configuration",
         ":test/test_sharding_strategy",
         ":toolchain_collection",
@@ -222,7 +222,9 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/actions:fileset_output_tree",
         "//src/main/java/com/google/devtools/build/lib/actions:localhost_capacity",
         "//src/main/java/com/google/devtools/build/lib/actions:package_roots",
+        "//src/main/java/com/google/devtools/build/lib/actions:param_file_action_input",
         "//src/main/java/com/google/devtools/build/lib/actions:param_file_info",
+        "//src/main/java/com/google/devtools/build/lib/actions:parameter_file",
         "//src/main/java/com/google/devtools/build/lib/actions:runfiles_tree",
         "//src/main/java/com/google/devtools/build/lib/analysis/config:build_configuration",
         "//src/main/java/com/google/devtools/build/lib/analysis/config:build_option_details",
@@ -1985,24 +1987,6 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/collect/nestedset",
         "//src/main/java/com/google/devtools/build/lib/packages:provider",
         "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi/test",
-    ],
-)
-
-java_library(
-    name = "test/persistent_test_info",
-    srcs = ["test/PersistentTestInfo.java"],
-    deps = [
-        ":starlark/args",
-        "//src/main/java/com/google/devtools/build/lib/actions",
-        "//src/main/java/com/google/devtools/build/lib/actions:artifacts",
-        "//src/main/java/com/google/devtools/build/lib/cmdline",
-        "//src/main/java/com/google/devtools/build/lib/concurrent:thread_safety",
-        "//src/main/java/com/google/devtools/build/lib/packages:provider",
-        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi",
-        "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi/test",
-        "//src/main/java/com/google/devtools/build/lib/supplier",
-        "//src/main/java/net/starlark/java/eval",
-        "//third_party:guava",
     ],
 )
 

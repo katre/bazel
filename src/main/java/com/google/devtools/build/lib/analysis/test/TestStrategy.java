@@ -30,6 +30,9 @@ import com.google.devtools.build.lib.actions.CommandLineLimits;
 import com.google.devtools.build.lib.actions.CommandLineExpansionException;
 import com.google.devtools.build.lib.actions.CommandLines.ExpandedCommandLines;
 import com.google.devtools.build.lib.actions.ExecException;
+import com.google.devtools.build.lib.actions.ParamFileActionInput;
+import com.google.devtools.build.lib.actions.ParameterFile;
+import com.google.devtools.build.lib.actions.ParameterFile.ParameterFileType;
 import com.google.devtools.build.lib.actions.PathMapper;
 import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.analysis.config.PerLabelOptions;
@@ -74,6 +77,19 @@ import javax.annotation.Nullable;
 
 /** A strategy for executing a {@link TestRunnerAction}. */
 public abstract class TestStrategy implements TestActionContext {
+  /** Result of expanding test arguments, including any paramfiles needed. */
+  public record ExpandedTestArgs(
+      ImmutableList<String> arguments, ImmutableList<ParamFileActionInput> paramFiles) {
+
+    public static ExpandedTestArgs of(List<String> arguments) {
+      return new ExpandedTestArgs(ImmutableList.copyOf(arguments), ImmutableList.of());
+    }
+
+    public static ExpandedTestArgs of(List<String> arguments, List<ParamFileActionInput> paramFiles) {
+      return new ExpandedTestArgs(ImmutableList.copyOf(arguments), ImmutableList.copyOf(paramFiles));
+    }
+  }
+
   private static class AttemptGroupImpl implements AttemptGroup {
     private boolean cancelled;
     private final Set<Thread> runningThreads;
@@ -189,13 +205,15 @@ public abstract class TestStrategy implements TestActionContext {
    * should be used in action execution.
    *
    * @param testAction The test action.
-   * @return the command line as string list.
+   * @param actionExecutionContext The action execution context (nullable for introspection).
+   * @return the expanded arguments and paramfiles.
    * @throws ExecException if {@link #expandedArgsFromAction} throws
    */
-  public static ImmutableList<String> getArgs(TestRunnerAction testAction)
+  public static ExpandedTestArgs getArgs(
+      TestRunnerAction testAction, @Nullable ActionExecutionContext actionExecutionContext)
       throws ExecException, InterruptedException {
     try {
-      return expandedArgsFromAction(testAction);
+      return expandedArgsFromAction(testAction, actionExecutionContext);
     } catch (CommandLineExpansionException e) {
       throw new UserExecException(
           e,
@@ -211,10 +229,12 @@ public abstract class TestStrategy implements TestActionContext {
    * --run_under} settings.
    *
    * @param testAction The test action.
-   * @return the command line as string list.
+   * @param actionExecutionContext The action execution context (nullable for introspection).
+   * @return the expanded arguments and paramfiles.
    * @throws CommandLineExpansionException
    */
-  public static ImmutableList<String> expandedArgsFromAction(TestRunnerAction testAction)
+  public static ExpandedTestArgs expandedArgsFromAction(
+      TestRunnerAction testAction, @Nullable ActionExecutionContext actionExecutionContext)
       throws CommandLineExpansionException, InterruptedException {
     List<String> args = new ArrayList<>();
     OS executionOs = testAction.getExecutionSettings().getExecutionOs();
@@ -251,15 +271,38 @@ public abstract class TestStrategy implements TestActionContext {
           persistentTestInfo
               .getCommandLines()
               .expand(
-                  /* inputMetadataProvider= */ null, // Test args don't reference artifacts
-                  testAction.getPrimaryOutput().getExecPath(), // Base path for param files
-                  PathMapper.NOOP, // Tests don't use path mapping
-                  CommandLineLimits.UNLIMITED); // Tests rarely hit limits
+                  actionExecutionContext != null
+                      ? actionExecutionContext.getInputMetadataProvider()
+                      : null,
+                  testAction.getPrimaryOutput().getExecPath(),
+                  PathMapper.NOOP,
+                  CommandLineLimits.UNLIMITED);
 
-      args.addAll(expanded.arguments());
+      List<String> persistentTestArgs = expanded.arguments();
+
+      // If we have execution context, create a paramfile for the args
+      if (actionExecutionContext != null && !persistentTestArgs.isEmpty()) {
+        // Derive paramfile path from test output's parent directory
+        PathFragment paramFilePath =
+            ParameterFile.derivePath(
+               testAction.getPrimaryOutput().getExecPath(), "persistenttestinfo");
+
+        // Create paramfile with persistent test arguments (DO NOT materialize it here)
+        ParamFileActionInput paramFile =
+            new ParamFileActionInput(
+                paramFilePath, persistentTestArgs, ParameterFileType.SHELL_QUOTED);
+
+        args.add("@" + paramFilePath);
+
+        // Return args WITH the paramfile for spawn input registration
+        return ExpandedTestArgs.of(args, new ImmutableList.Builder<ParamFileActionInput>().add(paramFile).addAll(expanded.getParamFiles()).build());
+      } else {
+        // No execution context (introspection mode) - add args directly
+        args.addAll(persistentTestArgs);
+      }
     }
 
-    return ImmutableList.copyOf(args);
+    return ExpandedTestArgs.of(args);
   }
 
   private static void addRunUnderArgs(TestRunnerAction testAction, List<String> args) {

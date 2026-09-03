@@ -250,7 +250,8 @@ public final class TestActionBuilder {
         getOsFromConstraintsOrHost(actionOwner.getExecutionPlatform()) == OS.WINDOWS;
 
     NestedSetBuilder<Artifact> inputsBuilder = NestedSetBuilder.stableOrder();
-    inputsBuilder.addTransitive(
+    NestedSetBuilder<Artifact> toolsBuilder = NestedSetBuilder.stableOrder();
+    toolsBuilder.addTransitive(
         NestedSetBuilder.create(Order.STABLE_ORDER, runfilesSupport.getRunfilesTreeArtifact()));
 
     if (!isExecutedOnWindows) {
@@ -271,8 +272,8 @@ public final class TestActionBuilder {
         isExecutedOnWindows
             ? ruleContext.getPrerequisiteArtifact("$test_wrapper")
             : ruleContext.getPrerequisiteArtifact("$test_setup_script");
-
     inputsBuilder.add(testActionExecutable);
+
     Artifact testXmlGeneratorExecutable =
         isExecutedOnWindows
             ? ruleContext.getPrerequisiteArtifact("$xml_writer")
@@ -388,6 +389,8 @@ public final class TestActionBuilder {
       }
     }
 
+    NestedSet<Artifact> tools = toolsBuilder.build();
+    inputsBuilder.addTransitive(tools);
     NestedSet<Artifact> inputs = inputsBuilder.build();
     int shardRuns = (shardCount > 0 ? shardCount : 1);
     List<Artifact.DerivedArtifact> results =
@@ -449,6 +452,7 @@ public final class TestActionBuilder {
             new TestRunnerAction(
                 actionOwner,
                 inputs,
+                tools,
                 runfilesSupport.getRunfilesTreeArtifact(),
                 testActionExecutable,
                 testXmlGeneratorExecutable,
