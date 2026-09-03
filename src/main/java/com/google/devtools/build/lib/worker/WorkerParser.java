@@ -204,6 +204,22 @@ public class WorkerParser {
   }
 
   /**
+   * Checks if an argument is a known wrapper script that should be stripped from worker args.
+   * These wrappers are only needed for single-shot execution, not for persistent workers.
+   */
+  private static boolean isWrapperScript(String arg) {
+    // Strip test-setup.sh wrapper (used for test execution)
+    if (arg.contains("/test-setup.sh") || arg.endsWith("test-setup.sh")) {
+      return true;
+    }
+    // Strip coverage collection wrapper (used for coverage mode)
+    if (arg.contains("/collect_coverage.sh") || arg.endsWith("collect_coverage.sh")) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Splits the command-line arguments of the {@code Spawn} into the part that is used to start the
    * persistent worker ({@code workerArgs}) and the part that goes into the {@code WorkRequest}
    * protobuf ({@code flagFiles}).
@@ -224,7 +240,8 @@ public class WorkerParser {
       for (int i = 0; i < args.size() - 1; i++) {
         if (isFlagFileArg(args.get(i))) {
           throwFlagFileFailure(REASON_EXCESS_FLAGFILE, spawn);
-        } else {
+        } else if (!isWrapperScript(args.get(i))) {
+          // Skip known wrapper scripts - they're only needed for single-shot mode
           workerArgs.add(args.get(i));
         }
       }
@@ -232,7 +249,8 @@ public class WorkerParser {
       for (String arg : args) {
         if (isLegacyFlagFileArg(arg)) {
           flagFiles.add(arg);
-        } else {
+        } else if (!isWrapperScript(arg)) {
+          // Skip known wrapper scripts - they're only needed for single-shot mode
           workerArgs.add(arg);
         }
       }

@@ -35,6 +35,7 @@ import com.google.devtools.build.lib.actions.ParameterFile;
 import com.google.devtools.build.lib.actions.ParameterFile.ParameterFileType;
 import com.google.devtools.build.lib.actions.PathMapper;
 import com.google.devtools.build.lib.actions.UserExecException;
+import com.google.devtools.build.lib.analysis.FilesToRunProvider;
 import com.google.devtools.build.lib.analysis.config.PerLabelOptions;
 import com.google.devtools.build.lib.analysis.config.RunUnder;
 import com.google.devtools.build.lib.analysis.config.RunUnder.CommandRunUnder;
@@ -239,9 +240,14 @@ public abstract class TestStrategy implements TestActionContext {
     List<String> args = new ArrayList<>();
     OS executionOs = testAction.getExecutionSettings().getExecutionOs();
 
+    // Always include test_setup.sh - even for persistent test runners
+    // When using workers, the worker strategy handles it appropriately
+    // When falling back to single-shot, we need the wrapper
     Artifact testSetup = testAction.getTestSetupScript();
     args.add(testSetup.getExecPath().getCallablePathStringForOs(executionOs));
 
+    // Always include coverage script wrapper when in coverage mode
+    // SUPPORTS_WORKERS is an optional capability - spawn may fall back to single-shot
     if (testAction.isCoverageMode()) {
       args.add(
           testAction
@@ -258,13 +264,28 @@ public abstract class TestStrategy implements TestActionContext {
       addRunUnderArgs(testAction, args);
     }
 
-    // Execute the test using the alias in the runfiles tree, as mandated by the Test Encyclopedia.
-    // Do not use getCallablePathStringForOs as tw.exe expects a path with forward slashes.
-    args.add(execSettings.getExecutable().getRunfilesPath().getCallablePathString());
-    Iterables.addAll(args, execSettings.getArgs().arguments());
-
-    // Check if test uses PersistentTestInfo with custom arguments
+    // Add the test executable to be wrapped by test-setup.sh
+    // For persistent test runners, use the worker executable; otherwise use the regular test executable
+    // In worker mode, WorkerSpawnRunner will call the worker directly via WorkRequest protocol
+    // In single-shot mode (fallback), test-setup.sh will properly wrap the worker executable
     PersistentTestInfo persistentTestInfo = testAction.getPersistentTestInfo();
+
+    if (!testAction.usesPersistentTestRunner()) {
+      // Execute the test using the alias in the runfiles tree, as mandated by the Test Encyclopedia.
+      // Do not use getCallablePathStringForOs as tw.exe expects a path with forward slashes.
+      args.add(execSettings.getExecutable().getRunfilesPath().getCallablePathString());
+      Iterables.addAll(args, execSettings.getArgs().arguments());
+    } else if (persistentTestInfo != null && persistentTestInfo.getWorkerExecutable() != null) {
+      // For persistent tests, use exec path (not runfiles path) because workers execute from execroot
+      // In worker mode: WorkerSpawnRunner strips test-setup.sh and uses this as the worker executable
+      // In single-shot mode: test-setup.sh receives this path and can execute it
+      Artifact workerExecutable = persistentTestInfo.getWorkerExecutable().getExecutable();
+      if (workerExecutable != null) {
+        args.add(workerExecutable.getExecPath().getCallablePathStringForOs(executionOs));
+      }
+    }
+
+    // Add arguments from PersistentTestInfo if available
     if (persistentTestInfo != null) {
       // Expand arguments from PersistentTestInfo provider
       ExpandedCommandLines expanded =

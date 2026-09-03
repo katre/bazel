@@ -17,9 +17,28 @@
 # shift stderr to stdout.
 exec 2>&1
 
+SILENT=
+for var in "$@"; do
+  if [[ "${var}" == "--persistent_worker" ]]; then
+    SILENT="true"
+  fi
+done
+
+function report() {
+  if [[ "${SILENT}" != "true" ]]; then
+    echo "$@"
+  fi
+}
+
+function report_error() {
+  if [[ "${SILENT}" != "true" ]]; then
+    echo >&2 "$@"
+  fi
+}
+
 # Executing the test log will page it.
-echo 'exec ${PAGER:-/usr/bin/less} "$0" || exit 1'
-echo "Executing tests from ${TEST_TARGET}"
+report 'exec ${PAGER:-/usr/bin/less} "$0" || exit 1'
+report "Executing tests from ${TEST_TARGET}"
 
 function is_absolute {
   [[ "$1" = /* ]] || [[ "$1" =~ ^[a-zA-Z]:[/\\].* ]]
@@ -67,6 +86,20 @@ is_absolute "$HOME" || HOME="$TEST_TMPDIR"
 export HOME
 is_absolute "$XML_OUTPUT_FILE" || XML_OUTPUT_FILE="$PWD/$XML_OUTPUT_FILE"
 
+# Clean up any paramfile paths to be absolute: when the test changes to the
+# runfiles dir then the paramfile will not be present under that path.
+updated_args=()
+for var in "$@"; do
+  if [[ "${var}" =~ ^@ ]]; then
+    base="${var:1}"
+    if [[ -e "${base}" ]]; then
+      var="@$(pwd)/${base}"
+    fi
+  fi
+  updated_args+=(${var})
+done
+set -- "${updated_args[@]}"
+
 # Set USER to the current user, unless passed by Bazel via --test_env.
 if [[ -z "$USER" ]]; then
   export USER=$(whoami)
@@ -82,7 +115,7 @@ is_absolute "$RUNFILES_DIR" || RUNFILES_DIR="$PWD/$RUNFILES_DIR"
 
 # Check that the runfiles directory exists
 if [[ ! -d "$RUNFILES_DIR" ]]; then
-    echo >&2 "ERROR: RUNFILES_DIR does not exist. This can happen when using --nobuild_runfile_manifests with local execution. Use a different execution strategy, or build with runfile manifests."
+    report_error "ERROR: RUNFILES_DIR does not exist. This can happen when using --nobuild_runfile_manifests with local execution. Use a different execution strategy, or build with runfile manifests."
     exit 1
 fi
 
@@ -150,11 +183,11 @@ fi
 # the entire source tree. By chdir'ing to the runfiles root, tests only
 # have direct access to their declared dependencies.
 if [ -z "$COVERAGE_DIR" ]; then
-  cd "$DIR" || { echo "Could not chdir $DIR"; exit 1; }
+  cd "$DIR" || { report_error "Could not chdir $DIR"; exit 1; }
 fi
 
 # This header marks where --test_output=streamed will start being printed.
-echo "-----------------------------------------------------------------------------"
+report "-----------------------------------------------------------------------------"
 
 # The path of this command-line is usually relative to the exec-root,
 # but when using --run_under it can be a "/bin/bash -c" command-line.
@@ -180,7 +213,7 @@ fi
 function rlocation() {
   caller 0 | {
     read LINE SUB FILE
-    echo >&2 "ERROR: rlocation is no longer implicitly provided by Bazel's test setup, but called from $SUB in line $LINE of $FILE. Please use https://github.com/bazelbuild/rules_shell/blob/main/shell/runfiles/runfiles.bash instead."
+    report_error "ERROR: rlocation is no longer implicitly provided by Bazel's test setup, but called from $SUB in line $LINE of $FILE. Please use https://github.com/bazelbuild/rules_shell/blob/main/shell/runfiles/runfiles.bash instead."
     exit 1
   }
 }
@@ -221,7 +254,7 @@ childPid=""
 function signal_children {
   local signal="${1-}"
   if [ "${signal}" = "SIGTERM" ]; then
-    echo "-- Test timed out at $(date +"%F %T %Z") --"
+    report_error "-- Test timed out at $(date +"%F %T %Z") --"
   fi
   if [ ! -z "$childPid" ]; then
     # For consistency with historical bazel behaviour, send signal to all child
@@ -327,8 +360,8 @@ if [[ -n "$TEST_UNDECLARED_OUTPUTS_DIR" && -n "$TEST_UNDECLARED_OUTPUTS_MANIFEST
       rel_path="${undeclared_output#$TEST_UNDECLARED_OUTPUTS_DIR/}"
       # stat has different flags for different systems. -c is supported by GNU,
       # and -f by BSD (and thus OSX). Try both.
-      file_size="$(stat -f%z "$undeclared_output" 2>/dev/null || stat -c%s "$undeclared_output" 2>/dev/null || echo "Could not stat $undeclared_output")"
-      file_type="$(file -L -b --mime-type "$undeclared_output" || echo "Could not establish file type for $undeclared_output")"
+      file_size="$(stat -f%z "$undeclared_output" 2>/dev/null || stat -c%s "$undeclared_output" 2>/dev/null || report_error "Could not stat $undeclared_output")"
+      file_type="$(file -L -b --mime-type "$undeclared_output" || report_error "Could not establish file type for $undeclared_output")"
 
       printf "$rel_path\t$file_size\t$file_type\n"
     done <<< "$undeclared_outputs" \
@@ -361,7 +394,7 @@ if [[ -n "$TEST_UNDECLARED_OUTPUTS_ZIP" ]] && cd "$TEST_UNDECLARED_OUTPUTS_DIR";
   UNDECLARED_OUTPUTS=(*)
   if [[ "${#UNDECLARED_OUTPUTS[@]}" != 0 ]]; then
     if ! zip_output="$(zip -qr "$TEST_UNDECLARED_OUTPUTS_ZIP" -- "${UNDECLARED_OUTPUTS[@]}")" ; then
-      echo >&2 "Could not create \"$TEST_UNDECLARED_OUTPUTS_ZIP\": $zip_output"
+      report_error "Could not create \"$TEST_UNDECLARED_OUTPUTS_ZIP\": $zip_output"
       exit 1
     fi
     # Use 'rm' instead of 'zip -m' so that we don't follow symlinks when deleting the
