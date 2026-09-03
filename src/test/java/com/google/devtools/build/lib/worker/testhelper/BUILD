@@ -81,6 +81,27 @@ java_binary(
     runtime_deps = [":ExampleWorkerMultiplexer_lib"],
 )
 
+# PersistentTestWorker binary
+java_library(
+    name = "PersistentTestWorker_lib",
+    srcs = ["PersistentTestWorker.java"],
+    deps = [
+        ":WorkerBase",
+        "//src/main/java/com/google/devtools/build/lib/actions:execution_requirements",
+        "//src/main/java/com/google/devtools/build/lib/worker:work_request_handlers",
+        "//src/main/java/com/google/devtools/common/options",
+    ],
+)
+
+java_binary(
+    name = "PersistentTestWorker",
+    main_class = "com.google.devtools.build.lib.worker.testhelper.PersistentTestWorker",
+    visibility = [
+        "//src/test/shell/integration:__pkg__",
+    ],
+    runtime_deps = [":PersistentTestWorker_lib"],
+)
+
 # Unit tests for WorkerBase
 java_test(
     name = "WorkerBaseTest",

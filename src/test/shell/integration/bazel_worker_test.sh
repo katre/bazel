@@ -911,4 +911,164 @@ function test_sandbox_cleanup_with_tracking() {
   do_test_sandbox_cleanup --experimental_worker_sandbox_inmemory_tracking=Worker
 }
 
+function prepare_persistent_test_worker() {
+  # Find and copy the PersistentTestWorker JAR
+  persistent_test_worker=$(find $BAZEL_RUNFILES -name PersistentTestWorker_deploy.jar)
+  cp ${persistent_test_worker} persistent_test_worker_lib.jar
+  chmod +w persistent_test_worker_lib.jar
+
+  # Create test data files
+  echo "expected content" > expected.txt
+  echo "expected content" > actual_pass.txt
+  echo "different content" > actual_fail.txt
+
+  # Create Starlark rule definition
+  cat >persistent_test.bzl <<'EOF'
+def _persistent_test_impl(ctx):
+    # Get the worker executable with runfiles
+    worker_info = ctx.attr._worker[DefaultInfo]
+    worker = worker_info.files_to_run
+
+    args = ctx.actions.args()
+    args.add(ctx.file.file1)
+    args.add(ctx.file.file2)
+
+    # Create PersistentTestInfo provider
+    persistent_info = PersistentTestInfo(
+        multiplex = False,
+        requires_worker_protocol = "proto",
+        worker_key_mnemonic = "PersistentTestWorker",
+        arguments = [args],
+        worker_executable = worker,
+        test_inputs = [ctx.file.file1, ctx.file.file2],
+    )
+
+    # Merge test runfiles with worker runfiles so worker can find its dependencies
+    # Include test input files in runfiles
+    merged_runfiles = ctx.runfiles(files = [ctx.file.file1, ctx.file.file2])
+    if worker_info.default_runfiles:
+        merged_runfiles = merged_runfiles.merge(worker_info.default_runfiles)
+    if worker_info.data_runfiles:
+        merged_runfiles = merged_runfiles.merge(worker_info.data_runfiles)
+
+    return [
+        DefaultInfo(
+            executable = worker.executable,
+            default_runfiles = merged_runfiles,
+        ),
+        persistent_info,
+    ]
+
+persistent_test = rule(
+    implementation = _persistent_test_impl,
+    test = True,
+    attrs = {
+        "_worker": attr.label(
+            cfg = "exec",
+            default = Label(":persistent_test_worker"),
+            executable = True,
+        ),
+        "file1": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
+        "file2": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+        ),
+    },
+)
+EOF
+
+  # Create BUILD file
+  cat >BUILD <<'EOF'
+load("@rules_java//java:java_binary.bzl", "java_binary")
+load("@rules_java//java:java_import.bzl", "java_import")
+load(":persistent_test.bzl", "persistent_test")
+
+java_import(
+    name = "persistent_test_worker_lib",
+    jars = ["persistent_test_worker_lib.jar"],
+)
+
+java_binary(
+    name = "persistent_test_worker",
+    main_class = "com.google.devtools.build.lib.worker.testhelper.PersistentTestWorker",
+    runtime_deps = [":persistent_test_worker_lib"],
+)
+
+persistent_test(
+    name = "test_pass",
+    file1 = "expected.txt",
+    file2 = "actual_pass.txt",
+)
+
+persistent_test(
+    name = "test_fail",
+    file1 = "expected.txt",
+    file2 = "actual_fail.txt",
+)
+EOF
+}
+
+function test_persistent_test_single_shot() {
+  prepare_persistent_test_worker
+
+  # Disable persistent test runners for this test
+  bazel test --test_output=all --enable_persistent_test_runners=false :test_pass &> "$TEST_log" \
+    || fail "test_pass should have passed"
+
+  bazel test --enable_persistent_test_runners=false :test_fail &> "$TEST_log" \
+    && fail "test_fail should have failed" || true
+
+  # Verify no worker was created
+  expect_not_log "Created new.*PersistentTest.*worker"
+}
+
+function test_persistent_test_worker_reuse() {
+  prepare_persistent_test_worker
+
+  # Enable persistent test runners
+  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
+    || fail "test_pass should have passed"
+
+  # Should see worker creation
+  expect_log "Created new.*PersistentTestWorker.*worker"
+
+  # Extract worker UUID from first test
+  UUID1=$(grep "Worker UUID:" "$TEST_log" | head -1 | awk '{print $3}')
+  COUNTER1=$(grep "Work unit counter:" "$TEST_log" | head -1 | awk '{print $4}')
+
+  # Run another test - should reuse worker
+  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
+    || fail "test_pass (second run) should have passed"
+
+  # Should NOT see worker creation (reusing existing)
+  expect_not_log "Created new.*PersistentTestWorker.*worker"
+
+  # Extract worker info from second test
+  UUID2=$(grep "Worker UUID:" "$TEST_log" | head -1 | awk '{print $3}')
+  COUNTER2=$(grep "Work unit counter:" "$TEST_log" | head -1 | awk '{print $4}')
+
+  # Verify same UUID (same worker process)
+  assert_equals "$UUID1" "$UUID2"
+
+  # Verify counter incremented (proves it's handling multiple requests)
+  [[ "$COUNTER2" -gt "$COUNTER1" ]] || fail "Work unit counter should increment"
+}
+
+function test_persistent_test_pass_fail_behavior() {
+  prepare_persistent_test_worker
+
+  # Test should pass when files match
+  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
+    || fail "test_pass should have passed"
+  expect_log "Comparing.*PASS"
+
+  # Test should fail when files differ
+  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_fail &> "$TEST_log" \
+    && fail "test_fail should have failed" || true
+  expect_log "Comparing.*FAIL"
+}
+
 run_suite "Worker integration tests"

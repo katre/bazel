@@ -1,8 +1,8 @@
-# ExampleWorker and ExampleWorkerMultiplexer Refactoring Summary
+# ExampleWorker, ExampleWorkerMultiplexer, and PersistentTestWorker Refactoring Summary
 
 ## Overview
 
-Successfully refactored `ExampleWorker` and `ExampleWorkerMultiplexer` to extend generic `WorkerBase<T>`, eliminating ~150+ lines of duplicated code, all type casts, and all duplicated paramfile/options parsing logic while preserving all existing test behaviors.
+Successfully refactored `ExampleWorker`, `ExampleWorkerMultiplexer`, and `PersistentTestWorker` to extend generic `WorkerBase<T>`, eliminating ~150+ lines of duplicated code, all type casts, and all duplicated paramfile/options parsing logic while preserving all existing test behaviors.
 
 ## Changes Made
 
@@ -103,7 +103,30 @@ Successfully refactored `ExampleWorker` and `ExampleWorkerMultiplexer` to extend
    - Added `:WorkerBase` to deps in BUILD file
    - Fixed main_class path to include full package name
 
-### 3. WorkerBaseTest Updates
+### 3. PersistentTestWorker Refactoring
+
+**Files Modified:**
+- `src/test/java/com/google/devtools/build/lib/worker/testhelper/PersistentTestWorker.java`
+
+**Key Changes:**
+
+1. **Extended Generic WorkerBase**: Changed class declaration to `extends WorkerBase<PersistentTestWorkerOptions>`
+
+2. **Implemented Required Abstract Methods** (with proper types, no casts):
+   - `getOptionsClass()`: Returns `Class<PersistentTestWorkerOptions>`
+   - `isPersistentMode(PersistentTestWorkerOptions options)`: No cast needed - direct access to `options.getPersistentWorker()`
+   - `getProtocolFormat(PersistentTestWorkerOptions options)`: Always returns PROTO
+
+3. **Fixed Static/Instance Issues:**
+   - Changed `workUnitCounter` from `static` to instance variable (correct per-worker state)
+   - Changed `runTest()` from `static` to instance method (can now access instance state)
+
+4. **Benefits:**
+   - No type casts
+   - Proper encapsulation with instance state
+   - Consistent with other workers
+
+### 4. WorkerBaseTest Updates
 
 **File:** `src/test/java/com/google/devtools/build/lib/worker/testhelper/WorkerBaseTest.java`
 
@@ -112,7 +135,7 @@ Successfully refactored `ExampleWorker` and `ExampleWorkerMultiplexer` to extend
 - Removed casts from `isPersistentMode()` and `getProtocolFormat()` methods
 - Changed return type of `getOptionsClass()` to `Class<TestWorkerOptions>`
 
-### 4. Build Configuration Updates
+### 5. Build Configuration Updates
 
 **File:** `src/test/java/com/google/devtools/build/lib/worker/testhelper/BUILD`
 
@@ -189,11 +212,12 @@ bazel test //src/test/shell/integration:bazel_worker_multiplexer_test
 
 ## Files Changed
 
-1. `src/test/java/com/google/devtools/build/lib/worker/testhelper/WorkerBase.java` - Made generic
+1. `src/test/java/com/google/devtools/build/lib/worker/testhelper/WorkerBase.java` - Made generic, added parseOptionsWithParamfiles()
 2. `src/test/java/com/google/devtools/build/lib/worker/testhelper/ExampleWorker.java` - Extends WorkerBase<ExampleWorkerOptions>
 3. `src/test/java/com/google/devtools/build/lib/worker/testhelper/ExampleWorkerMultiplexer.java` - Extends WorkerBase<ExampleWorkerMultiplexerOptions>
-4. `src/test/java/com/google/devtools/build/lib/worker/testhelper/WorkerBaseTest.java` - TestWorker extends WorkerBase<TestWorkerOptions>
-5. `src/test/java/com/google/devtools/build/lib/worker/testhelper/BUILD` - Added dependencies
+4. `src/test/java/com/google/devtools/build/lib/worker/testhelper/PersistentTestWorker.java` - Extends WorkerBase<PersistentTestWorkerOptions>
+5. `src/test/java/com/google/devtools/build/lib/worker/testhelper/WorkerBaseTest.java` - TestWorker extends WorkerBase<TestWorkerOptions>
+6. `src/test/java/com/google/devtools/build/lib/worker/testhelper/BUILD` - Added dependencies
 
 ## Implementation Notes
 
@@ -278,6 +302,6 @@ OptionsParser parser = parseOptionsWithParamfiles(args, true);
 The refactoring is complete. Future improvements could include:
 
 1. ~~Consider extracting paramfile expansion from parseOptionsAndLog() into a shared helper~~ ✅ DONE - Created parseOptionsWithParamfiles()
-2. Evaluate if more functionality can be moved into WorkerBase
-3. Apply similar refactoring pattern to other test workers (like PersistentTestWorker, which should extend `WorkerBase<PersistentTestWorkerOptions>`)
+2. ~~Apply similar refactoring pattern to other test workers (like PersistentTestWorker)~~ ✅ DONE
+3. Evaluate if more functionality can be moved into WorkerBase
 4. Consider if the static/instance pattern in ExampleWorker could be improved
