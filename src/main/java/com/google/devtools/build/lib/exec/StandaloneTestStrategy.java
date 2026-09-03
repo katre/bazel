@@ -92,6 +92,32 @@ public class StandaloneTestStrategy extends TestStrategy {
           .put("RUN_UNDER_RUNFILES", "1")
           .buildOrThrow();
 
+  // Environment variable prefixes that are test-specific and should not be part of WorkerKey
+  private static final ImmutableSet<String> TEST_SPECIFIC_ENV_VAR_PREFIXES =
+      ImmutableSet.of("TEST_", "TESTBRIDGE_", "COVERAGE_");
+
+  // Individual test-specific environment variables that should not be part of WorkerKey
+  private static final ImmutableSet<String> TEST_SPECIFIC_ENV_VARS =
+      ImmutableSet.of(
+          "XML_OUTPUT_FILE",
+          "RUNTEST_PRESERVE_CWD",
+          "IS_COVERAGE_SPAWN",
+          "RUNFILES_MANIFEST_ONLY");
+
+  /**
+   * Returns true if the given environment variable is test-specific and should not be part of
+   * the WorkerKey for persistent test runners. Test-specific variables are passed in each
+   * WorkRequest.environment instead.
+   */
+  private static boolean isTestSpecificEnvVar(String key) {
+    for (String prefix : TEST_SPECIFIC_ENV_VAR_PREFIXES) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return TEST_SPECIFIC_ENV_VARS.contains(key);
+  }
+
   public static final TestPolicy DEFAULT_LOCAL_POLICY = new TestPolicy(ENV_VARS);
 
   private final Path tmpDirRoot;
@@ -106,15 +132,35 @@ public class StandaloneTestStrategy extends TestStrategy {
   public TestRunnerSpawn createTestRunnerSpawn(
       TestRunnerAction action, ActionExecutionContext actionExecutionContext)
       throws ExecException, InterruptedException {
-    Map<String, String> testEnvironment =
+    Map<String, String> fullEnvironment =
         createEnvironment(actionExecutionContext, action, tmpDirRoot);
 
-    if (testEnvironment.containsKey(TEST_NAME_ENV)) {
+    if (fullEnvironment.containsKey(TEST_NAME_ENV)) {
       throw createTestExecException(
           TestAction.Code.LOCAL_TEST_PREREQ_UNMET,
           String.format(
               "cannot set env variable TEST_NAME=%s because TEST_NAME is reserved",
-              testEnvironment.get(TEST_NAME_ENV)));
+              fullEnvironment.get(TEST_NAME_ENV)));
+    }
+
+    // For persistent test runners, split environment into stable (WorkerKey) and test-specific
+    // (WorkRequest) parts
+    Map<String, String> spawnEnv;
+    Map<String, String> testSpecificEnv = new TreeMap<>();
+
+    if (action.usesPersistentTestRunner()) {
+      Map<String, String> stableEnv = new TreeMap<>();
+      for (Map.Entry<String, String> entry : fullEnvironment.entrySet()) {
+        if (isTestSpecificEnvVar(entry.getKey())) {
+          testSpecificEnv.put(entry.getKey(), entry.getValue());
+        } else {
+          stableEnv.put(entry.getKey(), entry.getValue());
+        }
+      }
+      spawnEnv = stableEnv;
+    } else {
+      // Non-persistent tests use full environment in spawn as before
+      spawnEnv = fullEnvironment;
     }
 
     Map<String, String> executionInfo = new TreeMap<>(action.getExecutionInfo());
@@ -149,6 +195,18 @@ public class StandaloneTestStrategy extends TestStrategy {
               ExecutionRequirements.WORKER_KEY_MNEMONIC, persistentTestInfo.getWorkerKeyMnemonic());
         }
       }
+
+      // Pass test-specific environment to be included in WorkRequest.environment
+      if (!testSpecificEnv.isEmpty()) {
+        StringBuilder encoded = new StringBuilder();
+        for (Map.Entry<String, String> entry : testSpecificEnv.entrySet()) {
+          if (encoded.length() > 0) {
+            encoded.append('\0');  // Use null separator
+          }
+          encoded.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        executionInfo.put(ExecutionRequirements.WORKER_REQUEST_ENVIRONMENT, encoded.toString());
+      }
     }
 
     SimpleSpawn.LocalResourcesSupplier localResourcesSupplier =
@@ -165,7 +223,7 @@ public class StandaloneTestStrategy extends TestStrategy {
         new SimpleSpawn(
             action,
             expandedArgs.arguments(),
-            ImmutableMap.copyOf(testEnvironment),
+            ImmutableMap.copyOf(spawnEnv),  // Only stable env for WorkerKey
             ImmutableMap.copyOf(executionInfo),
             // Add paramfiles to spawn inputs so they can be materialized
             SpawnInputs.of(action.getInputs(), expandedArgs.paramFiles()),

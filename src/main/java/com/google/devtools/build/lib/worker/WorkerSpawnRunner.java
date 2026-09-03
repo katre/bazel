@@ -288,6 +288,14 @@ final class WorkerSpawnRunner implements SpawnRunner {
     if (key.isMultiplex()) {
       requestBuilder.setRequestId(requestIdCounter.getAndIncrement());
     }
+
+    // Add per-request environment from executionInfo
+    String encodedEnv =
+        spawn.getExecutionInfo().get(com.google.devtools.build.lib.actions.ExecutionRequirements.WORKER_REQUEST_ENVIRONMENT);
+    if (encodedEnv != null) {
+      requestBuilder.putAllEnvironment(decodeRequestEnvironment(encodedEnv));
+    }
+
     return requestBuilder.build();
   }
 
@@ -299,6 +307,24 @@ final class WorkerSpawnRunner implements SpawnRunner {
       cancelRequestBuilder.setVerbosity(VERBOSE_LEVEL);
     }
     return cancelRequestBuilder.build();
+  }
+
+  /**
+   * Decodes the request-specific environment from the encoded string format.
+   * The format is: key1=value1\0key2=value2\0...
+   */
+  private static ImmutableMap<String, String> decodeRequestEnvironment(String encoded) {
+    if (encoded == null || encoded.isEmpty()) {
+      return ImmutableMap.of();
+    }
+    ImmutableMap.Builder<String, String> env = ImmutableMap.builder();
+    for (String entry : encoded.split("\0")) {
+      int idx = entry.indexOf('=');
+      if (idx > 0) {
+        env.put(entry.substring(0, idx), entry.substring(idx + 1));
+      }
+    }
+    return env.buildOrThrow();
   }
 
   /**
