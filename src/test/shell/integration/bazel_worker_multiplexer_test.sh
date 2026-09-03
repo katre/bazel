@@ -123,7 +123,7 @@ java_import(
 
 java_binary(
   name = "worker",
-  main_class = "com.google.devtools.build.lib.worker.ExampleWorkerMultiplexer",
+  main_class = "com.google.devtools.build.lib.worker.testhelper.ExampleWorkerMultiplexer",
   runtime_deps = [
     ":worker_lib",
   ],

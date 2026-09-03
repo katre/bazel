@@ -11,28 +11,30 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.google.devtools.build.lib.worker;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
+package com.google.devtools.build.lib.worker.testhelper;
 
 import com.google.common.base.Ascii;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.devtools.build.lib.worker.ExampleWorkerMultiplexerOptions.ExampleWorkMultiplexerOptions;
+import com.google.devtools.build.lib.actions.ExecutionRequirements.WorkerProtocolFormat;
+import com.google.devtools.build.lib.worker.WorkRequestHandler.WorkerMessageProcessor;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
+import com.google.devtools.common.options.OptionsBase;
 import com.google.devtools.common.options.OptionsParser;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,8 +46,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -53,9 +53,7 @@ import java.util.stream.Collectors;
  * default, it concatenates writes the options residue and outputs it on stdout. {@link
  * ExampleWorkerMultiplexerOptions} specifies ways the behaviour can be modofied.
  */
-public class ExampleWorkerMultiplexer {
-
-  static final Pattern FLAG_FILE_PATTERN = Pattern.compile("(?:@|--?flagfile=)(.+)");
+public class ExampleWorkerMultiplexer extends WorkerBase<ExampleWorkerMultiplexerOptions> {
 
   // Creating Executor Service with a thread pool of Size 3.
   static final int CONCURRENT_THREAD_NUMBER = 3;
@@ -74,30 +72,71 @@ public class ExampleWorkerMultiplexer {
   // Keep state across multiple builds.
   static final LinkedHashMap<String, String> inputs = new LinkedHashMap<>();
 
+  // Store expanded args for single-shot mode
+  private List<String> singleShotArgs;
+
+  @Override
+  protected Class<ExampleWorkerMultiplexerOptions> getOptionsClass() {
+    return ExampleWorkerMultiplexerOptions.class;
+  }
+
+  @Override
+  protected boolean isPersistentMode(ExampleWorkerMultiplexerOptions options) {
+    return options.getPersistentWorker();
+  }
+
+  @Override
+  protected WorkerProtocolFormat getProtocolFormat(ExampleWorkerMultiplexerOptions options) {
+    // ExampleWorkerMultiplexer only supports PROTO
+    return WorkerProtocolFormat.PROTO;
+  }
+
+  @Override
+  protected int runSingleShot(List<String> args) throws Exception {
+    // Use stored expanded args which include options, not just the residue
+    OptionsParser parser = parserHelper(singleShotArgs);
+    processRequest(parser, WorkRequest.getDefaultInstance());
+    return 0;
+  }
+
+  @Override
+  protected int runWork(List<String> args, PrintWriter err) {
+    // Not directly used since we override runPersistentWorker
+    throw new UnsupportedOperationException("Use runPersistentWorker instead");
+  }
+
+  @Override
+  public void run(String[] args) throws Exception {
+    List<String> expandedArgs = expandParamfiles(Arrays.asList(args));
+
+    if (ImmutableSet.copyOf(args).contains("--persistent_worker")) {
+      // Persistent mode: store args for use in runPersistentWorker
+      System.err.printf("Worker args: %s\n", String.join(" ", args));
+      System.setProperty("worker.args", String.join(" ", args));
+    } else {
+      // Single-shot mode: store expanded args for use in runSingleShot
+      singleShotArgs = expandedArgs;
+    }
+    super.run(args);
+  }
+
   private ExampleWorkerMultiplexer() {}
 
   public static void main(String[] args) throws Exception {
-    if (ImmutableSet.copyOf(args).contains("--persistent_worker")) {
-      System.err.printf("Worker args: %s\n", String.join(" ", args));
-      OptionsParser parser =
-          OptionsParser.builder()
-              .optionsClasses(ExampleWorkerMultiplexerOptions.class)
-              .allowResidue(false)
-              .build();
-      parser.parse(args);
-      ExampleWorkerMultiplexerOptions workerOptions =
-          parser.getOptions(ExampleWorkerMultiplexerOptions.class);
-      Preconditions.checkState(workerOptions.getPersistentWorker());
-
-      runPersistentWorker(workerOptions);
-    } else {
-      // This is a single invocation of the example that exits after it processed the request.
-      processRequest(parserHelper(ImmutableList.copyOf(args)), WorkRequest.getDefaultInstance());
-    }
+    ExampleWorkerMultiplexer worker = new ExampleWorkerMultiplexer();
+    worker.run(args);
   }
 
-  private static void runPersistentWorker(ExampleWorkerMultiplexerOptions workerOptions)
-      throws IOException, ExecutionException, InterruptedException {
+  @Override
+  protected void runPersistentWorker(WorkerMessageProcessor messageProcessor) throws Exception {
+    // Parse worker options from command line
+    List<String> expandedArgs = expandParamfiles(Arrays.asList(System.getProperty("worker.args", "").split(" ")));
+    OptionsParser workerParser = createOptionsParser(false);
+    workerParser.parse(expandedArgs);
+    ExampleWorkerMultiplexerOptions workerOptions =
+        workerParser.getOptions(ExampleWorkerMultiplexerOptions.class);
+    Preconditions.checkState(workerOptions.getPersistentWorker());
+
     PrintStream originalStdOut = System.out;
     PrintStream originalStdErr = System.err;
 
@@ -106,7 +145,7 @@ public class ExampleWorkerMultiplexer {
 
     while (true) {
       try {
-        WorkRequest request = WorkRequest.parseDelimitedFrom(System.in);
+        WorkRequest request = messageProcessor.readWorkRequest();
         if (request == null) {
           break;
         }
@@ -131,8 +170,8 @@ public class ExampleWorkerMultiplexer {
           int exitCode = 0;
           try {
             OptionsParser parser = parserHelper(request.getArgumentsList());
-            ExampleWorkMultiplexerOptions options =
-                parser.getOptions(ExampleWorkMultiplexerOptions.class);
+            ExampleWorkerMultiplexerOptions options =
+                parser.getOptions(ExampleWorkerMultiplexerOptions.class);
             if (options.getWriteCounter()) {
               counterOutput = workUnitCounter++;
             }
@@ -166,25 +205,9 @@ public class ExampleWorkerMultiplexer {
     }
   }
 
-  private static OptionsParser parserHelper(List<String> args) throws Exception {
-    ImmutableList.Builder<String> expandedArgs = ImmutableList.builder();
-    for (String arg : args) {
-      Matcher flagFileMatcher = FLAG_FILE_PATTERN.matcher(arg);
-      if (flagFileMatcher.matches()) {
-        expandedArgs.addAll(Files.readAllLines(Paths.get(flagFileMatcher.group(1)), UTF_8));
-      } else {
-        expandedArgs.add(arg);
-      }
-    }
-
-    OptionsParser parser =
-        OptionsParser.builder()
-            .optionsClasses(ExampleWorkMultiplexerOptions.class)
-            .allowResidue(true)
-            .build();
-    parser.parse(expandedArgs.build());
-
-    return parser;
+  private OptionsParser parserHelper(List<String> args) throws Exception {
+    // Use WorkerBase's parseOptionsWithParamfiles to handle paramfile expansion and parsing
+    return parseOptionsWithParamfiles(args, true);
   }
 
   private static Runnable createTask(
@@ -250,7 +273,8 @@ public class ExampleWorkerMultiplexer {
   }
 
   private static void processRequest(OptionsParser parser, WorkRequest request) throws Exception {
-    ExampleWorkMultiplexerOptions options = parser.getOptions(ExampleWorkMultiplexerOptions.class);
+    ExampleWorkerMultiplexerOptions options =
+        parser.getOptions(ExampleWorkerMultiplexerOptions.class);
 
     List<String> outputs = new ArrayList<>();
 

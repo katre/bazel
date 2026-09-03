@@ -112,7 +112,7 @@ public class WorkRequestHandler implements AutoCloseable {
   }
 
   /** Requests that are currently being processed. Visible for testing. */
-  final ConcurrentMap<Integer, RequestInfo> activeRequests = new ConcurrentHashMap<>();
+  protected final ConcurrentMap<Integer, RequestInfo> activeRequests = new ConcurrentHashMap<>();
 
   /** The function to be called after each {@link WorkRequest} is read. */
   private final WorkRequestCallback callback;
@@ -400,7 +400,7 @@ public class WorkRequestHandler implements AutoCloseable {
   }
 
   /** Starts a thread for the given request. */
-  void startResponseThread(WorkerIO workerIO, WorkRequest request) {
+  protected void startResponseThread(WorkerIO workerIO, WorkRequest request) {
     Thread currentThread = Thread.currentThread();
     String threadName =
         request.getRequestId() > 0
@@ -519,7 +519,7 @@ public class WorkRequestHandler implements AutoCloseable {
    * <p>For simplicity, and to avoid blocking in {@link #cancelCallback}, response to cancellation
    * is still handled by {@link #respondToRequest} once the canceled request aborts (or finishes).
    */
-  void respondToCancelRequest(WorkRequest request) {
+  protected void respondToCancelRequest(WorkRequest request) {
     // Theoretically, we could have gotten two singleplex requests, and we can't tell those apart.
     // However, that's a violation of the protocol, so we don't try to handle it (not least because
     // handling it would be quite error-prone).
@@ -549,6 +549,10 @@ public class WorkRequestHandler implements AutoCloseable {
         t.start();
       }
     }
+  }
+
+  protected WorkerMessageProcessor getMessageProcessor() {
+    return messageProcessor;
   }
 
   @Override
@@ -691,7 +695,7 @@ public class WorkRequestHandler implements AutoCloseable {
      * the work request.
      */
     @VisibleForTesting
-    WorkerIO(
+    public WorkerIO(
         InputStream originalInputStream,
         PrintStream originalOutputStream,
         PrintStream originalErrorStream,
@@ -747,7 +751,7 @@ public class WorkRequestHandler implements AutoCloseable {
 
     /** Returns the original error stream most commonly provided by {@link System#err} */
     @VisibleForTesting
-    PrintStream getOriginalErrorStream() {
+    public PrintStream getOriginalErrorStream() {
       return originalErrorStream;
     }
 

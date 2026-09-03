@@ -486,8 +486,6 @@ public final class OptionsClassProcessor extends AbstractProcessor {
           "com.google.devtools.build.lib.skyframe.config.PlatformMappingValueTest.",
           "com.google.devtools.build.lib.testing.common.FakeOptionsTest.",
           "com.google.devtools.build.lib.util.OptionsUtilsTest.",
-          "com.google.devtools.build.lib.worker.ExampleWorkerMultiplexerOptions",
-          "com.google.devtools.build.lib.worker.ExampleWorkerOptions",
           "com.google.devtools.common.options.BoolOrEnumConverterTest.",
           "com.google.devtools.common.options.EnumConverterTest.",
           "com.google.devtools.common.options.FieldOptionDefinitionTest.",

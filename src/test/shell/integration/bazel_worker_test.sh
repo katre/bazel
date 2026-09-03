@@ -189,7 +189,7 @@ java_import(
 
 java_binary(
   name = "worker",
-  main_class = "com.google.devtools.build.lib.worker.ExampleWorker",
+  main_class = "com.google.devtools.build.lib.worker.testhelper.ExampleWorker",
   runtime_deps = [
     ":worker_lib",
   ],

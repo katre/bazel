@@ -14,26 +14,6 @@ filegroup(
 )
 
 java_library(
-    name = "ExampleWorker_lib",
-    srcs = [
-        "ExampleWorker.java",
-        "ExampleWorkerMultiplexer.java",
-        "ExampleWorkerMultiplexerOptions.java",
-        "ExampleWorkerOptions.java",
-        "ExampleWorkerProtocol.java",
-    ],
-    deps = [
-        "//src/main/java/com/google/devtools/build/lib/actions:execution_requirements",
-        "//src/main/java/com/google/devtools/build/lib/worker:work_request_handlers",
-        "//src/main/java/com/google/devtools/common/options",
-        "//src/main/protobuf:worker_protocol_java_proto",
-        "//third_party/java/gson",
-        "//third_party/java/guava:base",
-        "//third_party/java/guava:collect",
-    ],
-)
-
-java_library(
     name = "testutil",
     testonly = 1,
     srcs = [
@@ -62,24 +42,6 @@ java_library(
         "//third_party/java/guava:collect",
         "//third_party/java/guava:hash",
     ],
-)
-
-java_binary(
-    name = "ExampleWorker",
-    main_class = "com.google.devtools.build.lib.worker.ExampleWorker",
-    visibility = [
-        "//src/test/shell/integration:__pkg__",
-    ],
-    runtime_deps = [":ExampleWorker_lib"],
-)
-
-java_binary(
-    name = "ExampleWorkerMultiplexer",
-    main_class = "com.google.devtools.build.lib.worker.ExampleWorkerMultiplexer",
-    visibility = [
-        "//src/test/shell/integration:__pkg__",
-    ],
-    runtime_deps = [":ExampleWorker_lib"],
 )
 
 java_library(

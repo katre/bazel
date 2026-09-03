@@ -11,71 +11,63 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.google.devtools.build.lib.worker;
+package com.google.devtools.build.lib.worker.testhelper;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Ascii;
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.actions.ExecutionRequirements.WorkerProtocolFormat;
-import com.google.devtools.build.lib.worker.ExampleWorkerOptions.ExampleWorkOptions;
+import com.google.devtools.build.lib.worker.WorkRequestHandler;
 import com.google.devtools.build.lib.worker.WorkRequestHandler.WorkerMessageProcessor;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
+import com.google.devtools.common.options.OptionsBase;
 import com.google.devtools.common.options.OptionsParser;
-import com.google.gson.stream.JsonReader;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.BiFunction;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /** An example implementation of a worker process that is used for integration tests. */
-public final class ExampleWorker {
-
-  static final Pattern FLAG_FILE_PATTERN = Pattern.compile("(?:@|--?flagfile=)(.+)");
+public final class ExampleWorker extends WorkerBase<ExampleWorkerOptions> {
 
   // A UUID that uniquely identifies this running worker process.
   static final UUID WORKER_UUID = UUID.randomUUID();
 
   // A counter that increases with each work unit processed.
-  static int workUnitCounter = 1;
+  int workUnitCounter = 1;
 
   // If true, returns corrupt responses instead of correct protobufs.
-  static boolean poisoned = false;
+  boolean poisoned = false;
 
-  static final LinkedHashMap<String, String> inputs = new LinkedHashMap<>();
+  final LinkedHashMap<String, String> inputs = new LinkedHashMap<>();
 
   // Contains the request currently being worked on.
-  private static WorkRequest currentRequest;
+  private WorkRequest currentRequest;
 
   // The options passed to this worker on a per-worker-lifetime basis.
-  static ExampleWorkerOptions workerOptions;
-  private static WorkerMessageProcessor messageProcessor;
+  private ExampleWorkerOptions workerOptions;
+  private WorkerMessageProcessor messageProcessor;
+  // Store expanded args for single-shot mode
+  private List<String> singleShotArgs;
 
-  private static class InterruptableWorkRequestHandler extends WorkRequestHandler {
+  private class InterruptableWorkRequestHandler extends WorkRequestHandler {
 
     InterruptableWorkRequestHandler(
         BiFunction<List<String>, PrintWriter, Integer> callback,
@@ -91,7 +83,7 @@ public final class ExampleWorker {
       WorkerIO workerIO = new WorkerIO(System.in, System.out, System.err, captured, captured);
 
       while (true) {
-        WorkRequest request = messageProcessor.readWorkRequest();
+        WorkRequest request = getMessageProcessor().readWorkRequest();
         if (request == null) {
           break;
         }
@@ -132,41 +124,64 @@ public final class ExampleWorker {
     }
   }
 
-  public static void main(String[] args) throws Exception {
-    if (ImmutableSet.copyOf(args).contains("--persistent_worker")) {
-      System.err.printf("Worker args: %s\n", String.join(" ", args));
-      OptionsParser parser =
-          OptionsParser.builder()
-              .optionsClasses(ExampleWorkerOptions.class)
-              .allowResidue(false)
-              .build();
-      parser.parse(args);
-      workerOptions = parser.getOptions(ExampleWorkerOptions.class);
-      WorkerProtocolFormat protocolFormat = workerOptions.getWorkerProtocol();
-      messageProcessor = null;
-      switch (protocolFormat) {
-        case JSON:
-          messageProcessor =
-              new JsonWorkerMessageProcessor(
-                  new JsonReader(new BufferedReader(new InputStreamReader(System.in, UTF_8))),
-                  new BufferedWriter(new OutputStreamWriter(System.out, UTF_8)));
-          break;
-        case PROTO:
-          messageProcessor = new ProtoWorkerMessageProcessor(System.in, System.out);
-          break;
-      }
-      Preconditions.checkNotNull(messageProcessor);
-      WorkRequestHandler workRequestHandler =
-          new InterruptableWorkRequestHandler(ExampleWorker::doWork, System.err, messageProcessor);
-      workRequestHandler.processRequests();
-
-    } else {
-      // This is a single invocation of the example that exits after it processed the request.
-      parseOptionsAndLog(ImmutableList.copyOf(args));
-    }
+  @Override
+  protected Class<ExampleWorkerOptions> getOptionsClass() {
+    return ExampleWorkerOptions.class;
   }
 
-  private static int doWork(List<String> args, PrintWriter err) {
+  @Override
+  protected boolean isPersistentMode(ExampleWorkerOptions options) {
+    return options.getPersistentWorker();
+  }
+
+  @Override
+  protected WorkerProtocolFormat getProtocolFormat(ExampleWorkerOptions options) {
+    return options.getWorkerProtocol();
+  }
+
+  @Override
+  protected int runSingleShot(List<String> args) throws Exception {
+    // Use stored expanded args which include options, not just the residue
+    parseOptionsAndLog(singleShotArgs);
+    return 0;
+  }
+
+  @Override
+  protected int runWork(List<String> args, PrintWriter err) {
+    return doWork(args, err);
+  }
+
+  @Override
+  public void run(String[] args) throws Exception {
+    List<String> expandedArgs = expandParamfiles(Arrays.asList(args));
+
+    if (ImmutableSet.copyOf(args).contains("--persistent_worker")) {
+      // Persistent mode: parse and store worker options
+      System.err.printf("Worker args: %s\n", String.join(" ", args));
+      OptionsParser parser = createOptionsParser(false);
+      parser.parse(expandedArgs);
+      workerOptions = parser.getOptions(ExampleWorkerOptions.class);
+    } else {
+      // Single-shot mode: store expanded args for use in runSingleShot
+      singleShotArgs = expandedArgs;
+    }
+    super.run(args);
+  }
+
+  @Override
+  protected void runPersistentWorker(WorkerMessageProcessor messageProcessor) throws Exception {
+    // Use custom handler with all the special test behaviors
+    WorkRequestHandler handler =
+        new InterruptableWorkRequestHandler(this::doWork, System.err, messageProcessor);
+    handler.processRequests();
+  }
+
+  public static void main(String[] args) throws Exception {
+    ExampleWorker worker = new ExampleWorker();
+    worker.run(args);
+  }
+
+  private int doWork(List<String> args, PrintWriter err) {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
     PrintStream originalStdOut = System.out;
@@ -246,21 +261,10 @@ public final class ExampleWorker {
     return 0;
   }
 
-  private static void parseOptionsAndLog(List<String> args) throws Exception {
-    ImmutableList.Builder<String> expandedArgs = ImmutableList.builder();
-    for (String arg : args) {
-      Matcher flagFileMatcher = FLAG_FILE_PATTERN.matcher(arg);
-      if (flagFileMatcher.matches()) {
-        expandedArgs.addAll(Files.readAllLines(Paths.get(flagFileMatcher.group(1)), UTF_8));
-      } else {
-        expandedArgs.add(arg);
-      }
-    }
-
-    OptionsParser parser =
-        OptionsParser.builder().optionsClasses(ExampleWorkOptions.class).allowResidue(true).build();
-    parser.parse(expandedArgs.build());
-    ExampleWorkOptions options = parser.getOptions(ExampleWorkOptions.class);
+  private void parseOptionsAndLog(List<String> args) throws Exception {
+    // Use WorkerBase's parseOptionsWithParamfiles to handle paramfile expansion and parsing
+    OptionsParser parser = parseOptionsWithParamfiles(args, true);
+    ExampleWorkerOptions options = parser.getOptions(ExampleWorkerOptions.class);
 
     List<String> outputs = new ArrayList<>();
 
