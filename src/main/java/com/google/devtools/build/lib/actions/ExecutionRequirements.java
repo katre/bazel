@@ -291,13 +291,6 @@ public class ExecutionRequirements {
   /** Override for the action's mnemonic to allow for better worker process reuse. */
   public static final String WORKER_KEY_MNEMONIC = "worker-key-mnemonic";
 
-  /**
-   * Environment variables to be passed in WorkRequest.environment field for per-request
-   * environment customization. This allows workers to be reused even when individual requests
-   * need different environment variables.
-   */
-  public static final String WORKER_REQUEST_ENVIRONMENT = "worker-request-environment";
-
   public static final ImmutableMap<String, String> WORKER_MODE_ENABLED =
       ImmutableMap.of(SUPPORTS_WORKERS, "1");
 
