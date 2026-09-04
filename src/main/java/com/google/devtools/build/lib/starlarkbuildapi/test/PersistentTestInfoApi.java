@@ -16,7 +16,6 @@ package com.google.devtools.build.lib.starlarkbuildapi.test;
 
 import com.google.devtools.build.docgen.annot.DocCategory;
 import com.google.devtools.build.docgen.annot.StarlarkConstructor;
-import com.google.devtools.build.lib.collect.nestedset.Depset;
 import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.ProviderApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.StructApi;
@@ -83,29 +82,6 @@ public interface PersistentTestInfoApi extends StructApi {
       structField = true)
   Sequence<CommandLineArgsApi> getArguments();
 
-  @StarlarkMethod(
-      name = "worker_executable",
-      doc =
-          "The persistent worker executable. This is a FilesToRunProvider representing the worker"
-              + " binary that will handle test requests. When specified, this executable is used in"
-              + " the spawn's tools (affecting WorkerKey) while test inputs are passed separately."
-              + " Returns None if not specified.",
-      structField = true,
-      allowReturnNones = true)
-  @Nullable
-  Object getWorkerExecutable();
-
-  @StarlarkMethod(
-      name = "test_inputs",
-      doc =
-          "Test-specific input files (test binary, test data, etc.) as a depset. These inputs are"
-              + " passed to the worker via WorkRequest for each test execution. Returns None if not"
-              + " specified.",
-      structField = true,
-      allowReturnNones = true)
-  @Nullable
-  Depset getTestInputsForStarlark();
-
   /** Provider for {@link PersistentTestInfoApi}. */
   @StarlarkBuiltin(name = "Provider", category = DocCategory.PROVIDER, documented = false, doc = "")
   interface PersistentTestInfoApiProvider extends ProviderApi {
@@ -146,24 +122,7 @@ public interface PersistentTestInfoApi extends StructApi {
               defaultValue = "[]",
               named = true,
               positional = false,
-              doc = "Arguments for the test runner. Can be strings or Args objects."),
-          @Param(
-              name = "worker_executable",
-              defaultValue = "None",
-              positional = false,
-              named = true,
-              doc =
-                  "The persistent worker executable. Should be a FilesToRunProvider representing"
-                      + " the worker binary that will handle test requests. If not specified, falls"
-                      + " back to standard test execution tools."),
-          @Param(
-              name = "test_inputs",
-              defaultValue = "None",
-              positional = false,
-              named = true,
-              doc =
-                  "Optional depset of test-specific input files (test binary, test data, etc.). If"
-                      + " not specified, uses all action inputs.")
+              doc = "Arguments for the test runner. Can be strings or Args objects.")
         },
         selfCall = true,
         useStarlarkThread = true)
@@ -173,8 +132,6 @@ public interface PersistentTestInfoApi extends StructApi {
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
         Sequence<?> arguments,
-        @Nullable Object workerExecutable,
-        @Nullable Depset testInputs,
         StarlarkThread thread)
         throws EvalException;
   }

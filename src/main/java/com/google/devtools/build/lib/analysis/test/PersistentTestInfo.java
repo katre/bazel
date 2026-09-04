@@ -21,12 +21,9 @@ import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.CommandLine;
 import com.google.devtools.build.lib.actions.CommandLines;
 import com.google.devtools.build.lib.actions.CommandLines.CommandLineAndParamFileInfo;
-import com.google.devtools.build.lib.analysis.FilesToRunProvider;
 import com.google.devtools.build.lib.analysis.starlark.Args;
 import com.google.devtools.build.lib.cmdline.RepositoryMapping;
 import com.google.devtools.build.lib.cmdline.StarlarkThreadContext;
-import com.google.devtools.build.lib.collect.nestedset.Depset;
-import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
@@ -54,8 +51,6 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
   private final String requiresWorkerProtocol;
   @Nullable private final String workerKeyMnemonic;
   private final CommandLines commandLines;
-  @Nullable private final FilesToRunProvider workerExecutable;
-  @Nullable private final NestedSet<Artifact> testInputs;
 
   /**
    * Constructs a new provider with the specified worker configuration.
@@ -64,16 +59,12 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
    * @param requiresWorkerProtocol the protocol format ("proto" or "json")
    * @param workerKeyMnemonic optional mnemonic for flag-based filtering (null if not set)
    * @param commandLines command lines for test runner arguments
-   * @param workerExecutable the persistent worker executable (null if not specified)
-   * @param testInputs test-specific input files (null if not specified)
    */
   public PersistentTestInfo(
       boolean multiplex,
       String requiresWorkerProtocol,
       @Nullable String workerKeyMnemonic,
-      CommandLines commandLines,
-      @Nullable FilesToRunProvider workerExecutable,
-      @Nullable NestedSet<Artifact> testInputs) {
+      CommandLines commandLines) {
     this.multiplex = multiplex;
     this.requiresWorkerProtocol = Preconditions.checkNotNull(requiresWorkerProtocol);
     if (!requiresWorkerProtocol.equals("proto") && !requiresWorkerProtocol.equals("json")) {
@@ -85,8 +76,6 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     this.workerKeyMnemonic =
         (workerKeyMnemonic == null || workerKeyMnemonic.isEmpty()) ? null : workerKeyMnemonic;
     this.commandLines = Preconditions.checkNotNull(commandLines);
-    this.workerExecutable = workerExecutable;
-    this.testInputs = testInputs;
   }
 
   @Override
@@ -134,27 +123,6 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     return commandLines;
   }
 
-  /**
-   * Returns the worker executable, or null if not specified.
-   */
-  @Nullable
-  public FilesToRunProvider getWorkerExecutable() {
-    return workerExecutable;
-  }
-
-  /** Returns the test-specific inputs, or null if not specified. */
-  @Nullable
-  public NestedSet<Artifact> getTestInputs() {
-    return testInputs;
-  }
-
-  /** Returns the test inputs as a Depset for Starlark. */
-  @Override
-  @Nullable
-  public Depset getTestInputsForStarlark() {
-    return testInputs != null ? Depset.of(Artifact.class, testInputs) : null;
-  }
-
   /** Provider implementation for {@link PersistentTestInfoApi}. */
   public static class PersistentTestInfoProvider extends BuiltinProvider<PersistentTestInfo>
       implements PersistentTestInfoApi.PersistentTestInfoApiProvider {
@@ -169,8 +137,6 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
         Sequence<?> arguments,
-        @Nullable Object workerExecutable,
-        @Nullable Depset testInputs,
         StarlarkThread thread)
         throws EvalException {
       // Validate protocol
@@ -178,23 +144,6 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         throw new EvalException(
             "requires_worker_protocol must be either \"proto\" or \"json\", got: "
                 + requiresWorkerProtocol);
-      }
-
-      // Validate and extract worker executable
-      FilesToRunProvider workerExec = null;
-      if (workerExecutable != null) {
-        if (!(workerExecutable instanceof FilesToRunProvider)) {
-          throw new EvalException(
-              "worker_executable must be a FilesToRunProvider, got: "
-                  + Starlark.type(workerExecutable));
-        }
-        workerExec = (FilesToRunProvider) workerExecutable;
-      }
-
-      // Validate and extract test inputs
-      NestedSet<Artifact> testInputsSet = null;
-      if (testInputs != null) {
-        testInputsSet = Depset.cast(testInputs, Artifact.class, "test_inputs");
       }
 
       // Get RepositoryMapping from thread context
@@ -242,7 +191,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       }
 
       return new PersistentTestInfo(
-          multiplex, requiresWorkerProtocol, workerKeyMnemonic, builder.build(), workerExec, testInputsSet);
+          multiplex, requiresWorkerProtocol, workerKeyMnemonic, builder.build());
     }
   }
 }
