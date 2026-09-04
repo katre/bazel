@@ -33,7 +33,7 @@ source "${CURRENT_DIR}/../integration_test_setup.sh" \
 # fixed.
 example_worker=$(find $BAZEL_RUNFILES -name ExampleWorker_deploy.jar)
 
-add_to_bazelrc "build -s"
+#add_to_bazelrc "build -s"
 add_to_bazelrc "build --spawn_strategy=worker,standalone"
 add_to_bazelrc "build --worker_verbose --worker_max_instances=1"
 add_to_bazelrc "build --noworker_multiplex"
@@ -1031,7 +1031,7 @@ function test_persistent_test_worker_reuse() {
   prepare_persistent_test_worker
 
   # Enable persistent test runners
-  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
+  bazel test --test_output=all --cache_test_results=no --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
     || fail "test_pass should have passed"
 
   # Should see worker creation
@@ -1041,9 +1041,9 @@ function test_persistent_test_worker_reuse() {
   UUID1=$(grep "Worker UUID:" "$TEST_log" | head -1 | awk '{print $3}')
   COUNTER1=$(grep "Work unit counter:" "$TEST_log" | head -1 | awk '{print $4}')
 
-  # Run another test - should reuse worker
-  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
-    || fail "test_pass (second run) should have passed"
+  # Run a different test - should reuse worker
+  bazel test --test_output=all --cache_test_results=no --enable_persistent_test_runners=PersistentTestWorker :test_fail &> "$TEST_log" \
+    && fail "test_fail should have failed"
 
   # Should NOT see worker creation (reusing existing)
   expect_not_log "Created new.*PersistentTestWorker.*worker"
