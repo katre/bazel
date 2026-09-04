@@ -926,12 +926,20 @@ function prepare_persistent_test_worker() {
   cat >persistent_test.bzl <<'EOF'
 def _persistent_test_impl(ctx):
     # Get the worker executable with runfiles
-    worker_info = ctx.attr._worker[DefaultInfo]
-    worker = worker_info.files_to_run
+    #worker_info = ctx.attr._worker[DefaultInfo]
+    #worker = worker_info.files_to_run
+    worker = ctx.executable._worker
+
+    file1 = ctx.file.file1
+    file2 = ctx.file.file2
+
+    # Return the executable and runfiles
+    runfiles = ctx.runfiles(files = [worker, file1, file2])
+    runfiles = runfiles.merge(ctx.attr._worker[DefaultInfo].default_runfiles)
 
     args = ctx.actions.args()
-    args.add(ctx.file.file1)
-    args.add(ctx.file.file2)
+    args.add(file1)
+    args.add(file2)
 
     # Create PersistentTestInfo provider
     persistent_info = PersistentTestInfo(
@@ -939,22 +947,14 @@ def _persistent_test_impl(ctx):
         requires_worker_protocol = "proto",
         worker_key_mnemonic = "PersistentTestWorker",
         arguments = [args],
-        worker_executable = worker,
-        test_inputs = [ctx.file.file1, ctx.file.file2],
+        #worker_executable = worker,
+        #test_inputs = [file1, file2],
     )
-
-    # Merge test runfiles with worker runfiles so worker can find its dependencies
-    # Include test input files in runfiles
-    merged_runfiles = ctx.runfiles(files = [ctx.file.file1, ctx.file.file2])
-    if worker_info.default_runfiles:
-        merged_runfiles = merged_runfiles.merge(worker_info.default_runfiles)
-    if worker_info.data_runfiles:
-        merged_runfiles = merged_runfiles.merge(worker_info.data_runfiles)
 
     return [
         DefaultInfo(
-            executable = worker.executable,
-            default_runfiles = merged_runfiles,
+            executable = worker,
+            default_runfiles = runfiles,
         ),
         persistent_info,
     ]
@@ -1017,9 +1017,11 @@ function test_persistent_test_single_shot() {
   # Disable persistent test runners for this test
   bazel test --test_output=all --enable_persistent_test_runners=false :test_pass &> "$TEST_log" \
     || fail "test_pass should have passed"
+  expect_log "Comparing.*PASS"
 
-  bazel test --enable_persistent_test_runners=false :test_fail &> "$TEST_log" \
+  bazel test --test_output=all --enable_persistent_test_runners=false :test_fail &> "$TEST_log" \
     && fail "test_fail should have failed" || true
+  expect_log "Comparing.*FAIL"
 
   # Verify no worker was created
   expect_not_log "Created new.*PersistentTest.*worker"
@@ -1061,12 +1063,12 @@ function test_persistent_test_pass_fail_behavior() {
   prepare_persistent_test_worker
 
   # Test should pass when files match
-  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
+  bazel test --test_output=all --enable_persistent_test_runners=PersistentTestWorker :test_pass &> "$TEST_log" \
     || fail "test_pass should have passed"
   expect_log "Comparing.*PASS"
 
   # Test should fail when files differ
-  bazel test --enable_persistent_test_runners=PersistentTestWorker :test_fail &> "$TEST_log" \
+  bazel test --test_output=all --enable_persistent_test_runners=PersistentTestWorker :test_fail &> "$TEST_log" \
     && fail "test_fail should have failed" || true
   expect_log "Comparing.*FAIL"
 }
