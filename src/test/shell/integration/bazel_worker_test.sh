@@ -943,6 +943,7 @@ def _persistent_test_impl(ctx):
 
     # Create PersistentTestInfo provider
     persistent_info = PersistentTestInfo(
+        ctx = ctx,
         multiplex = False,
         requires_worker_protocol = "proto",
         worker_key_mnemonic = "PersistentTestWorker",
