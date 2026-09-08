@@ -491,6 +491,11 @@ public final class RuleConfiguredTargetBuilder {
                     providersBuilder.getProvider(
                         InstrumentedFilesInfo.STARLARK_CONSTRUCTOR.getKey()));
 
+    PersistentTestInfo persistentTestInfo = (PersistentTestInfo)
+            providersBuilder.getProvider(PersistentTestInfo.PROVIDER.getKey());
+    if (persistentTestInfo != null && persistentTestInfo.getWorkerExecutable() != null) {
+      filesToRunProvider = persistentTestInfo.getWorkerExecutable();
+    }
     TestParams testParams =
         testActionBuilder
             .setFilesToRunProvider(filesToRunProvider)
@@ -498,8 +503,7 @@ public final class RuleConfiguredTargetBuilder {
             .setExecutionRequirements(
                 (ExecutionInfo) providersBuilder.getProvider(ExecutionInfo.PROVIDER.getKey()))
             .setPersistentTestInfo(
-                (PersistentTestInfo)
-                    providersBuilder.getProvider(PersistentTestInfo.PROVIDER.getKey()))
+                    persistentTestInfo)
             .build();
     return new TestProvider(testParams);
   }

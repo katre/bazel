@@ -20,6 +20,7 @@ import com.google.devtools.build.lib.collect.nestedset.Depset;
 import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
 import com.google.devtools.build.lib.starlarkbuildapi.FilesToRunProviderApi;
+import com.google.devtools.build.lib.starlarkbuildapi.StarlarkRuleContextApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.ProviderApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.StructApi;
 import javax.annotation.Nullable;
@@ -120,6 +121,15 @@ public interface PersistentTestInfoApi extends StructApi {
         doc = "",
         documented = false,
         parameters = {
+                @Param(
+                        name = "ctx",
+                        defaultValue = "None",
+                        named = true,
+                        positional = false,
+                        allowedTypes = {@ParamType(type = StarlarkRuleContextApi.class)},
+                        doc =
+                                "TKTK context"
+                ),
           @Param(
               name = "multiplex",
               defaultValue = "False",
@@ -181,6 +191,7 @@ public interface PersistentTestInfoApi extends StructApi {
         useStarlarkThread = true)
     @StarlarkConstructor
     PersistentTestInfoApi constructor(
+            StarlarkRuleContextApi context,
         Boolean multiplex,
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,

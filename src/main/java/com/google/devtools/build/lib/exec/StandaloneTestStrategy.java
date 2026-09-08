@@ -166,8 +166,8 @@ public class StandaloneTestStrategy extends TestStrategy {
     //   - workerExecutable (if provided) is used for tools (affects WorkerKey for worker reuse)
     //   - testInputs (if provided) is used for inputs (test-specific files passed per request)
     // For non-persistent tests or when fields are null, use standard action values
-    NestedSet<Artifact> spawnTools = action.getTools();
     NestedSet<Artifact> spawnInputs = action.getInputs();
+    NestedSet<Artifact> spawnTools = action.getTools();
 
     PersistentTestInfo persistentTestInfo = action.getPersistentTestInfo();
     if (persistentTestInfo != null) {

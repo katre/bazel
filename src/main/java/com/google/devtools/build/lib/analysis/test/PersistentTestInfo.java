@@ -23,6 +23,7 @@ import com.google.devtools.build.lib.actions.CommandLines;
 import com.google.devtools.build.lib.actions.CommandLines.CommandLineAndParamFileInfo;
 import com.google.devtools.build.lib.analysis.FilesToRunProvider;
 import com.google.devtools.build.lib.analysis.starlark.Args;
+import com.google.devtools.build.lib.analysis.starlark.StarlarkRuleContext;
 import com.google.devtools.build.lib.cmdline.RepositoryMapping;
 import com.google.devtools.build.lib.cmdline.StarlarkThreadContext;
 import com.google.devtools.build.lib.collect.nestedset.Depset;
@@ -34,6 +35,7 @@ import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
 import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
+import com.google.devtools.build.lib.starlarkbuildapi.StarlarkRuleContextApi;
 import com.google.devtools.build.lib.starlarkbuildapi.test.PersistentTestInfoApi;
 import com.google.devtools.build.lib.supplier.InterruptibleSupplier;
 import javax.annotation.Nullable;
@@ -71,6 +73,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
    * @param testInputs test-specific input files (null if not specified)
    */
   public PersistentTestInfo(
+
       boolean multiplex,
       String requiresWorkerProtocol,
       @Nullable String workerKeyMnemonic,
@@ -168,6 +171,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
 
     @Override
     public PersistentTestInfoApi constructor(
+            StarlarkRuleContextApi ctx,
         Boolean multiplex,
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
@@ -186,10 +190,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       // Validate and extract worker executable
       FilesToRunProvider workerExec = null;
       if (workerExecutableUnchecked instanceof Artifact workerExecutableArtifact) {
-        workerExec = FilesToRunProvider.create(
-            NestedSetBuilder.create(Order.STABLE_ORDER, workerExecutableArtifact),
-            /* runfilesSupport= */ null,
-            /* executable= */ workerExecutableArtifact);
+        StarlarkRuleContext starlarkRuleContext = (StarlarkRuleContext) ctx;
+        workerExec = starlarkRuleContext.getExecutableRunfiles(workerExecutableArtifact, "worker_executable");
       } else if (workerExecutableUnchecked instanceof FilesToRunProvider workerExecutableFiles) {
         workerExec = workerExecutableFiles;
       } else {
