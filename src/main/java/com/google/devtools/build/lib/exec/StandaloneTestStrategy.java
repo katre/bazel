@@ -161,6 +161,28 @@ public class StandaloneTestStrategy extends TestStrategy {
     // Get expanded args with any paramfiles
     TestStrategy.ExpandedTestArgs expandedArgs = getArgs(action, actionExecutionContext);
 
+    // Determine tools and inputs based on PersistentTestInfo
+    // For persistent test runners:
+    //   - workerExecutable (if provided) is used for tools (affects WorkerKey for worker reuse)
+    //   - testInputs (if provided) is used for inputs (test-specific files passed per request)
+    // For non-persistent tests or when fields are null, use standard action values
+    NestedSet<Artifact> spawnTools = action.getTools();
+    NestedSet<Artifact> spawnInputs = action.getInputs();
+
+    PersistentTestInfo persistentTestInfo = action.getPersistentTestInfo();
+    if (persistentTestInfo != null) {
+
+      // Use worker executable for tools if provided
+      if (persistentTestInfo.getWorkerExecutable() != null) {
+        spawnTools = persistentTestInfo.getWorkerExecutable().getFilesToRun();
+      }
+
+      // Use test inputs if provided
+      if (persistentTestInfo.getTestInputs() != null) {
+        spawnInputs = persistentTestInfo.getTestInputs();
+      }
+    }
+
     Spawn spawn =
         new SimpleSpawn(
             action,
@@ -168,8 +190,8 @@ public class StandaloneTestStrategy extends TestStrategy {
             ImmutableMap.copyOf(testEnvironment),
             ImmutableMap.copyOf(executionInfo),
             // Add paramfiles to spawn inputs so they can be materialized
-            SpawnInputs.of(action.getInputs(), expandedArgs.paramFiles()),
-            action.getTools(),
+            SpawnInputs.of(spawnInputs, expandedArgs.paramFiles()),
+            spawnTools,
             ImmutableSet.copyOf(action.getSpawnOutputs()),
             /* mandatoryOutputs= */ ImmutableSet.of(),
             localResourcesSupplier);
