@@ -947,8 +947,8 @@ def _persistent_test_impl(ctx):
         requires_worker_protocol = "proto",
         worker_key_mnemonic = "PersistentTestWorker",
         arguments = [args],
-        #worker_executable = worker,
-        #test_inputs = [file1, file2],
+        worker_executable = worker,
+        test_inputs = [file1, file2],
     )
 
     return [
