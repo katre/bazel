@@ -18,10 +18,13 @@ import com.google.devtools.build.docgen.annot.DocCategory;
 import com.google.devtools.build.docgen.annot.StarlarkConstructor;
 import com.google.devtools.build.lib.collect.nestedset.Depset;
 import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
+import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
+import com.google.devtools.build.lib.starlarkbuildapi.FilesToRunProviderApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.ProviderApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.StructApi;
 import javax.annotation.Nullable;
 import net.starlark.java.annot.Param;
+import net.starlark.java.annot.ParamType;
 import net.starlark.java.annot.StarlarkBuiltin;
 import net.starlark.java.annot.StarlarkMethod;
 import net.starlark.java.eval.EvalException;
@@ -72,6 +75,8 @@ public interface PersistentTestInfoApi extends StructApi {
   @Nullable
   String getWorkerKeyMnemonic();
 
+  // TODO(katre): split into worker_args and test_args
+
   @StarlarkMethod(
       name = "arguments",
       doc =
@@ -93,7 +98,7 @@ public interface PersistentTestInfoApi extends StructApi {
       structField = true,
       allowReturnNones = true)
   @Nullable
-  Object getWorkerExecutable();
+  FilesToRunProviderApi getWorkerExecutable();
 
   @StarlarkMethod(
       name = "test_inputs",
@@ -119,7 +124,7 @@ public interface PersistentTestInfoApi extends StructApi {
               name = "multiplex",
               defaultValue = "False",
               named = true,
-              positional = true,
+              positional = false,
               doc =
                   "If True, the test worker can handle multiple concurrent test requests in"
                       + " parallel. If False (default), the worker processes test requests"
@@ -128,15 +133,15 @@ public interface PersistentTestInfoApi extends StructApi {
               name = "requires_worker_protocol",
               defaultValue = "\"proto\"",
               named = true,
-              positional = true,
+              positional = false,
               doc =
                   "The communication protocol for the test worker. Must be either \"proto\""
                       + " (default) for protocol buffer format, or \"json\" for JSON format."),
           @Param(
               name = "worker_key_mnemonic",
-              defaultValue = "\"\"",
+              defaultValue = "None",
               named = true,
-              positional = true,
+              positional = false,
               doc =
                   "Optional mnemonic to identify this type of test worker for flag-based"
                       + " filtering. Empty string (default) means always eligible for persistent"
@@ -152,15 +157,22 @@ public interface PersistentTestInfoApi extends StructApi {
               defaultValue = "None",
               positional = false,
               named = true,
+                  allowedTypes = {
+                          @ParamType(type = FileApi.class),
+                          @ParamType(type = FilesToRunProviderApi.class),
+                  },
               doc =
-                  "The persistent worker executable. Should be a FilesToRunProvider representing"
-                      + " the worker binary that will handle test requests. If not specified, falls"
-                      + " back to standard test execution tools."),
+                  "The persistent worker executable. Should be a FIle or FilesToRunProvider representing"
+                      + " the worker binary that will handle test requests."),
           @Param(
               name = "test_inputs",
-              defaultValue = "None",
+              defaultValue = "[]]",
               positional = false,
-              named = true,
+                  allowedTypes = {
+                          @ParamType(type = Sequence.class, generic1 = FileApi.class),
+                          @ParamType(type = Depset.class),
+                  },
+                  named = true,
               doc =
                   "Optional depset of test-specific input files (test binary, test data, etc.). If"
                       + " not specified, uses all action inputs.")
@@ -173,8 +185,8 @@ public interface PersistentTestInfoApi extends StructApi {
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
         Sequence<?> arguments,
-        @Nullable Object workerExecutable,
-        @Nullable Depset testInputs,
+        @Nullable Object workerExecutableUnchecked,
+        @Nullable Object testInputsUnchecked,
         StarlarkThread thread)
         throws EvalException;
   }

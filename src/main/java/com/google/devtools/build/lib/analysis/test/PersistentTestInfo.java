@@ -27,10 +27,13 @@ import com.google.devtools.build.lib.cmdline.RepositoryMapping;
 import com.google.devtools.build.lib.cmdline.StarlarkThreadContext;
 import com.google.devtools.build.lib.collect.nestedset.Depset;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
+import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
+import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
+import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
 import com.google.devtools.build.lib.starlarkbuildapi.test.PersistentTestInfoApi;
 import com.google.devtools.build.lib.supplier.InterruptibleSupplier;
 import javax.annotation.Nullable;
@@ -169,8 +172,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
         Sequence<?> arguments,
-        @Nullable Object workerExecutable,
-        @Nullable Depset testInputs,
+        @Nullable Object workerExecutableUnchecked,
+        @Nullable Object testInputsUnchecked,
         StarlarkThread thread)
         throws EvalException {
       // Validate protocol
@@ -182,19 +185,23 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
 
       // Validate and extract worker executable
       FilesToRunProvider workerExec = null;
-      if (workerExecutable != null) {
-        if (!(workerExecutable instanceof FilesToRunProvider)) {
-          throw new EvalException(
-              "worker_executable must be a FilesToRunProvider, got: "
-                  + Starlark.type(workerExecutable));
-        }
-        workerExec = (FilesToRunProvider) workerExecutable;
+      if (workerExecutableUnchecked instanceof Artifact workerExecutableArtifact) {
+        throw new EvalException("Not implemented");
+      } else if (workerExecutableUnchecked instanceof FilesToRunProvider workerExecutableFiles) {
+        workerExec = workerExecutableFiles;
+      } else {
+        throw new EvalException(
+                "worker_executable must be a File or FilesToRunProvider, got: "
+                        + Starlark.type(workerExecutableUnchecked));
       }
 
       // Validate and extract test inputs
       NestedSet<Artifact> testInputsSet = null;
-      if (testInputs != null) {
-        testInputsSet = Depset.cast(testInputs, Artifact.class, "test_inputs");
+      if (testInputsUnchecked instanceof Sequence) {
+        Sequence<Artifact> inputs = Sequence.cast(testInputsUnchecked, Artifact.class, "inputs");
+        testInputsSet = NestedSetBuilder.wrap(Order.STABLE_ORDER, inputs);
+      } else {
+        testInputsSet = Depset.cast(testInputsUnchecked, Artifact.class, "inputs");
       }
 
       // Get RepositoryMapping from thread context
