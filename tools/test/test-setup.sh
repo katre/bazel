@@ -91,9 +91,21 @@ is_absolute "$XML_OUTPUT_FILE" || XML_OUTPUT_FILE="$PWD/$XML_OUTPUT_FILE"
 updated_args=()
 for var in "$@"; do
   if [[ "${var}" =~ ^@ ]]; then
-    base="${var:1}"
-    if [[ -e "${base}" ]]; then
-      var="@$(pwd)/${base}"
+    paramfile="${var:1}"
+    if [[ -e "${paramfile}" ]]; then
+      # Fix any file references in the paramfile to also be absolute
+      replacement_paramfile="$(mktemp)"
+      for line in $(cat "${paramfile}"); do
+        if [[ -e "${line}" ]]; then
+          echo "$(pwd)/${line}" >> "${replacement_paramfile}"
+        else
+          echo "${line}" >> "${replacement_paramfile}"
+        fi
+      done
+      cat "${replacement_paramfile}" > "${paramfile}"
+      rm "${replacement_paramfile}"
+
+      var="@$(pwd)/${paramfile}"
     fi
   fi
   updated_args+=(${var})
