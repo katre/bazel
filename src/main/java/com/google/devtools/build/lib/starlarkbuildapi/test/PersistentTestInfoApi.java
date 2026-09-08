@@ -166,7 +166,7 @@ public interface PersistentTestInfoApi extends StructApi {
                       + " the worker binary that will handle test requests."),
           @Param(
               name = "test_inputs",
-              defaultValue = "[]]",
+              defaultValue = "[]",
               positional = false,
                   allowedTypes = {
                           @ParamType(type = Sequence.class, generic1 = FileApi.class),
