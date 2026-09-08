@@ -186,7 +186,10 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       // Validate and extract worker executable
       FilesToRunProvider workerExec = null;
       if (workerExecutableUnchecked instanceof Artifact workerExecutableArtifact) {
-        throw new EvalException("Not implemented");
+        workerExec = FilesToRunProvider.create(
+            NestedSetBuilder.create(Order.STABLE_ORDER, workerExecutableArtifact),
+            /* runfilesSupport= */ null,
+            /* executable= */ workerExecutableArtifact);
       } else if (workerExecutableUnchecked instanceof FilesToRunProvider workerExecutableFiles) {
         workerExec = workerExecutableFiles;
       } else {
