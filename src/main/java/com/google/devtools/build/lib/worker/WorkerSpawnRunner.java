@@ -19,6 +19,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.actions.ActionExecutionMetadata;
@@ -32,6 +33,7 @@ import com.google.devtools.build.lib.actions.ResourceManager.ResourceHandle;
 import com.google.devtools.build.lib.actions.ResourceManager.ResourcePriority;
 import com.google.devtools.build.lib.actions.ResourceSet;
 import com.google.devtools.build.lib.actions.RunfilesTree;
+import com.google.devtools.build.lib.actions.SimpleSpawn;
 import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.SpawnMetrics;
 import com.google.devtools.build.lib.actions.SpawnResult;
@@ -71,6 +73,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -82,6 +85,18 @@ final class WorkerSpawnRunner implements SpawnRunner {
   public static final String ERROR_MESSAGE_PREFIX =
       "Worker strategy cannot execute this %s action, ";
   public static final String REASON_NO_TOOLS = "because the action has no tools";
+
+  /** Environment variable prefixes that are test-specific. */
+  private static final ImmutableList<String> TEST_SPECIFIC_ENV_VAR_PREFIXES =
+      ImmutableList.of("TEST_", "TESTBRIDGE_", "COVERAGE_");
+
+  /** Individual test-specific environment variables. */
+  private static final ImmutableList<String> TEST_SPECIFIC_ENV_VARS =
+      ImmutableList.of(
+          "XML_OUTPUT_FILE",
+          "RUNTEST_PRESERVE_CWD",
+          "IS_COVERAGE_SPAWN",
+          "RUNFILES_MANIFEST_ONLY");
 
   /**
    * The verbosity level implied by `--worker_verbose`. This value allows for manually setting some
@@ -130,6 +145,24 @@ final class WorkerSpawnRunner implements SpawnRunner {
   @Override
   public String getName() {
     return "worker";
+  }
+
+  /**
+   * Returns true if the environment variable is test-specific and should be passed in
+   * WorkRequest.environment rather than being part of the WorkerKey.
+   */
+  private static boolean isTestSpecificEnvVar(String key) {
+    for (String prefix : TEST_SPECIFIC_ENV_VAR_PREFIXES) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return TEST_SPECIFIC_ENV_VARS.contains(key);
+  }
+
+  /** Checks if this spawn is a test executing via persistent worker. */
+  private static boolean isPersistentTestSpawn(Spawn spawn) {
+    return spawn.getMnemonic().equals("TestRunner") && Spawns.supportsWorkers(spawn);
   }
 
   @Override
@@ -189,6 +222,47 @@ final class WorkerSpawnRunner implements SpawnRunner {
         runfilesTreeUpdater.updateRunfiles(runfilesTrees);
       }
 
+      // For persistent test runners, split environment to enable worker reuse
+      Spawn spawnForWorkerKey = spawn;
+      Map<String, String> testSpecificEnv = ImmutableMap.of();
+
+      if (isPersistentTestSpawn(spawn)) {
+        Map<String, String> stableEnv = new TreeMap<>();
+        Map<String, String> testEnv = new TreeMap<>();
+
+        for (Map.Entry<String, String> entry : spawn.getEnvironment().entrySet()) {
+          if (isTestSpecificEnvVar(entry.getKey())) {
+            testEnv.put(entry.getKey(), entry.getValue());
+          } else {
+            stableEnv.put(entry.getKey(), entry.getValue());
+          }
+        }
+
+        // Create modified spawn with stable environment only for WorkerKey computation
+        spawnForWorkerKey =
+            new SimpleSpawn(
+                spawn.getResourceOwner(),
+                spawn.getArguments(),
+                ImmutableMap.copyOf(stableEnv),
+                spawn.getExecutionInfo(),
+                spawn.getInputFiles(),
+                spawn.getToolFiles(),
+                spawn.getOutputFiles(),
+                /* mandatoryOutputs= */ null,
+                () -> {
+                  try {
+                    return spawn.getLocalResources();
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(
+                        "Interrupted while getting local resources (should not happen)", e);
+                  }
+                },
+                spawn.getPathMapper());
+
+        testSpecificEnv = ImmutableMap.copyOf(testEnv);
+      }
+
       InputMetadataProvider inputFileCache = context.getInputMetadataProvider();
 
       SandboxInputs inputFiles;
@@ -202,7 +276,7 @@ final class WorkerSpawnRunner implements SpawnRunner {
       }
       SandboxOutputs outputs = SandboxHelpers.getOutputs(spawn);
 
-      WorkerParser.WorkerConfig workerConfig = workerParser.compute(spawn, context);
+      WorkerParser.WorkerConfig workerConfig = workerParser.compute(spawnForWorkerKey, context);
       WorkerKey key = workerConfig.getWorkerKey();
       List<String> flagFiles = workerConfig.getFlagFiles();
 
@@ -211,7 +285,15 @@ final class WorkerSpawnRunner implements SpawnRunner {
               .setInputFiles(inputFiles.getFiles().size() + inputFiles.getSymlinks().size());
       response =
           execInWorker(
-              spawn, key, context, inputFiles, outputs, flagFiles, inputFileCache, spawnMetrics);
+              spawn,
+              key,
+              context,
+              inputFiles,
+              outputs,
+              flagFiles,
+              inputFileCache,
+              spawnMetrics,
+              testSpecificEnv);
 
       FileOutErr outErr = context.getFileOutErr();
       response.getOutputBytes().writeTo(outErr.getErrorStream());
@@ -246,7 +328,8 @@ final class WorkerSpawnRunner implements SpawnRunner {
       List<String> flagfiles,
       Map<VirtualActionInput, byte[]> virtualInputDigests,
       InputMetadataProvider inputFileCache,
-      WorkerKey key)
+      WorkerKey key,
+      Map<String, String> testSpecificEnv)
       throws IOException, InterruptedException {
     WorkRequest.Builder requestBuilder = WorkRequest.newBuilder();
     for (String flagfile : flagfiles) {
@@ -282,6 +365,10 @@ final class WorkerSpawnRunner implements SpawnRunner {
           .setPath(StringEncoding.internalToUnicode(input.getExecPathString()))
           .setDigest(digest);
     }
+
+    // Populate WorkRequest.environment with test-specific variables for persistent test runners
+    requestBuilder.putAllEnvironment(testSpecificEnv);
+
     if (workerOptions.getWorkerVerbose()) {
       requestBuilder.setVerbosity(VERBOSE_LEVEL);
     }
@@ -387,7 +474,8 @@ final class WorkerSpawnRunner implements SpawnRunner {
       SandboxOutputs outputs,
       List<String> flagFiles,
       InputMetadataProvider inputFileCache,
-      SpawnMetrics.Builder spawnMetrics)
+      SpawnMetrics.Builder spawnMetrics,
+      Map<String, String> testSpecificEnv)
       throws ExecException, IOException, InterruptedException {
     WorkerOwner workerOwner = null;
     WorkResponse response;
@@ -425,7 +513,14 @@ final class WorkerSpawnRunner implements SpawnRunner {
       workerOwner.getWorker().setReporter(workerOptions.getWorkerVerbose() ? reporter : null);
       request =
           createWorkRequest(
-              spawn, context, inputFiles, flagFiles, virtualInputDigests, inputFileCache, key);
+              spawn,
+              context,
+              inputFiles,
+              flagFiles,
+              virtualInputDigests,
+              inputFileCache,
+              key,
+              testSpecificEnv);
 
       // We acquired a worker and resources -- mark that as queuing time.
       spawnMetrics.setQueueTime(queueStopwatch.elapsed());
