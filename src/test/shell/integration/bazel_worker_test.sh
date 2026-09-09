@@ -955,7 +955,7 @@ def _persistent_test_impl(ctx):
     return [
         DefaultInfo(
             executable = worker,
-            default_runfiles = runfiles,
+            #default_runfiles = runfiles,
         ),
         persistent_info,
     ]
