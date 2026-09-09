@@ -19,11 +19,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.hash.HashCode;
+import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.ExecException;
 import com.google.devtools.build.lib.actions.ExecutionRequirements.WorkerProtocolFormat;
 import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.Spawns;
 import com.google.devtools.build.lib.actions.UserExecException;
+import com.google.devtools.build.lib.analysis.test.TestRunnerAction;
 import com.google.devtools.build.lib.exec.BinTools;
 import com.google.devtools.build.lib.exec.SpawnRunner.SpawnExecutionContext;
 import com.google.devtools.build.lib.exec.local.LocalEnvProvider;
@@ -227,11 +229,16 @@ public class WorkerParser {
    * <p>After stripping, the arguments should start with the worker executable, followed by
    * any persistent test argument flagfiles.
    *
+   * <p>The first argument after stripping test-setup.sh is the test executable's runfiles path
+   * (an alias in the runfiles tree). This method replaces it with the actual exec path so the
+   * worker can locate the executable correctly.
+   *
    * @param args the original spawn arguments
-   * @return filtered arguments without test infrastructure
+   * @param spawn the spawn containing the test action with executable artifact
+   * @return filtered arguments without test infrastructure, with exec path substituted
    */
   private static ImmutableList<String> stripTestInfrastructure(
-      ImmutableList<String> args) {
+      ImmutableList<String> args, Spawn spawn) {
     if (args.isEmpty()) {
       return args;
     }
@@ -240,8 +247,28 @@ public class WorkerParser {
       args = args.subList(1, args.size());
     }
 
-    // The first argument here is an alias in the runfiles tree (see TestStrategy.expandedArgsFromAction).
-    // TODO: replace it with the actual post-runfiles expanded version.
+    // Replace the runfiles alias with the actual exec path
+    if (!args.isEmpty()) {
+      // Safe cast: isPersistentTestWorkerSpawn() verified mnemonic is "TestRunner"
+      TestRunnerAction testAction = (TestRunnerAction) spawn.getResourceOwner();
+      Artifact executable = testAction.getExecutionSettings().getExecutable();
+
+      // Get both paths
+      PathFragment runfilesPath = executable.getRunfilesPath();
+      PathFragment execPath = executable.getExecPath();
+
+      // Check if first arg matches the runfiles path
+      String firstArg = args.get(0);
+      String runfilesPathString = runfilesPath.getCallablePathString();
+
+      if (firstArg.equals(runfilesPathString)) {
+        // Replace with exec path
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        builder.add(execPath.getCallablePathString());
+        builder.addAll(args.subList(1, args.size()));
+        return builder.build();
+      }
+    }
 
     return args;
   }
@@ -262,7 +289,7 @@ public class WorkerParser {
 
     // For persistent test workers, strip test infrastructure from spawn arguments
     if (isPersistentTestWorkerSpawn(spawn)) {
-      args = stripTestInfrastructure(args);
+      args = stripTestInfrastructure(args, spawn);
     }
 
     if (workerOptions.getStrictFlagfiles()) {
