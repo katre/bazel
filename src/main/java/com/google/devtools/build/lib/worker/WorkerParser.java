@@ -204,6 +204,49 @@ public class WorkerParser {
   }
 
   /**
+   * Checks if this spawn is a test executing via persistent worker.
+   *
+   * @param spawn The spawn to check
+   * @return true if this is a test spawn that supports workers
+   */
+  private static boolean isPersistentTestWorkerSpawn(Spawn spawn) {
+    return spawn.getMnemonic().equals("TestRunner") && Spawns.supportsWorkers(spawn);
+  }
+
+  /**
+   * Strips test infrastructure arguments from spawn arguments for persistent test workers.
+   *
+   * <p>For persistent test workers, TestStrategy.expandedArgsFromAction() includes test
+   * infrastructure that should not be used to start the worker process:
+   * <ul>
+   *   <li>test-setup.sh - wrapper script for single-shot execution (first argument)
+   *   <li>coverage script - only for single-shot coverage collection (conditional)
+   *   <li>run_under wrapper - handled by spawn execution, not worker (conditional)
+   * </ul>
+   *
+   * <p>After stripping, the arguments should start with the worker executable, followed by
+   * any persistent test argument flagfiles.
+   *
+   * @param args the original spawn arguments
+   * @return filtered arguments without test infrastructure
+   */
+  private static ImmutableList<String> stripTestInfrastructure(
+      ImmutableList<String> args) {
+    if (args.isEmpty()) {
+      return args;
+    }
+
+    if (args.get(0).endsWith("/test-setup.sh")) {
+      args = args.subList(1, args.size());
+    }
+
+    // The first argument here is an alias in the runfiles tree (see TestStrategy.expandedArgsFromAction).
+    // TODO: replace it with the actual post-runfiles expanded version.
+
+    return args;
+  }
+
+  /**
    * Splits the command-line arguments of the {@code Spawn} into the part that is used to start the
    * persistent worker ({@code workerArgs}) and the part that goes into the {@code WorkRequest}
    * protobuf ({@code flagFiles}).
@@ -216,6 +259,12 @@ public class WorkerParser {
     if (args.isEmpty()) {
       throwFlagFileFailure(REASON_NO_FLAGFILE, spawn);
     }
+
+    // For persistent test workers, strip test infrastructure from spawn arguments
+    if (isPersistentTestWorkerSpawn(spawn)) {
+      args = stripTestInfrastructure(args);
+    }
+
     if (workerOptions.getStrictFlagfiles()) {
       if (!isFlagFileArg(Iterables.getLast(args))) {
         throwFlagFileFailure(REASON_NO_FINAL_FLAGFILE, spawn);
