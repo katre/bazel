@@ -110,6 +110,18 @@ public interface PersistentTestInfoApi extends StructApi {
   FilesToRunProviderApi getWorkerExecutable();
 
   @StarlarkMethod(
+      name = "worker_tools",
+      doc =
+          "Additional tools required by the worker beyond the main executable. These tools are"
+              + " added to the spawn's tools and affect WorkerKey computation, ensuring workers"
+              + " restart when tool files change. Can be a list or depset of Files or"
+              + " FilesToRunProvider instances. Returns None if not specified.",
+      structField = true,
+      allowReturnNones = true)
+  @Nullable
+  Depset getWorkerToolsForStarlark();
+
+  @StarlarkMethod(
       name = "test_inputs",
       doc =
           "Test-specific input files (test binary, test data, etc.) as a depset. These inputs are"
@@ -189,6 +201,19 @@ public interface PersistentTestInfoApi extends StructApi {
                   "The persistent worker executable. Should be a FIle or FilesToRunProvider representing"
                       + " the worker binary that will handle test requests."),
           @Param(
+              name = "worker_tools",
+              defaultValue = "None",
+              positional = false,
+              allowedTypes = {
+                  @ParamType(type = Sequence.class),
+                  @ParamType(type = Depset.class),
+              },
+              named = true,
+              doc =
+                  "Optional additional tools required by the worker. Can be a list or depset of Files"
+                      + " or FilesToRunProvider instances. These tools are tracked separately from"
+                      + " test_inputs and affect worker lifecycle management."),
+          @Param(
               name = "test_inputs",
               defaultValue = "[]",
               positional = false,
@@ -212,6 +237,7 @@ public interface PersistentTestInfoApi extends StructApi {
         Sequence<?> workerArgs,
         Sequence<?> testArgs,
         @Nullable Object workerExecutableUnchecked,
+        @Nullable Object workerToolsUnchecked,
         @Nullable Object testInputsUnchecked,
         StarlarkThread thread)
         throws EvalException;

@@ -61,6 +61,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
   private final CommandLines workerCommandLines;
   private final CommandLines testCommandLines;
   @Nullable private final FilesToRunProvider workerExecutable;
+  @Nullable private final NestedSet<Artifact> workerTools;
   @Nullable private final NestedSet<Artifact> testInputs;
 
   /**
@@ -72,6 +73,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
    * @param workerCommandLines command lines for worker binary arguments
    * @param testCommandLines command lines for test runner arguments
    * @param workerExecutable the persistent worker executable (null if not specified)
+   * @param workerTools additional tools required by the worker (null if not specified)
    * @param testInputs test-specific input files (null if not specified)
    */
   public PersistentTestInfo(
@@ -82,6 +84,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       CommandLines workerCommandLines,
       CommandLines testCommandLines,
       @Nullable FilesToRunProvider workerExecutable,
+      @Nullable NestedSet<Artifact> workerTools,
       @Nullable NestedSet<Artifact> testInputs) {
     this.multiplex = multiplex;
     this.requiresWorkerProtocol = Preconditions.checkNotNull(requiresWorkerProtocol);
@@ -96,6 +99,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     this.workerCommandLines = Preconditions.checkNotNull(workerCommandLines);
     this.testCommandLines = Preconditions.checkNotNull(testCommandLines);
     this.workerExecutable = workerExecutable;
+    this.workerTools = workerTools;
     this.testInputs = testInputs;
   }
 
@@ -168,6 +172,19 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     return workerExecutable;
   }
 
+  /** Returns worker tools as a Depset for Starlark, or null if not specified. */
+  @Override
+  @Nullable
+  public Depset getWorkerToolsForStarlark() {
+    return workerTools != null ? Depset.of(Artifact.class, workerTools) : null;
+  }
+
+  /** Returns the worker tools for internal use, or null if not specified. */
+  @Nullable
+  public NestedSet<Artifact> getWorkerTools() {
+    return workerTools;
+  }
+
   /** Returns the test-specific inputs, or null if not specified. */
   @Nullable
   public NestedSet<Artifact> getTestInputs() {
@@ -198,6 +215,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         Sequence<?> workerArgs,
         Sequence<?> testArgs,
         @Nullable Object workerExecutableUnchecked,
+        @Nullable Object workerToolsUnchecked,
         @Nullable Object testInputsUnchecked,
         StarlarkThread thread)
         throws EvalException {
@@ -220,6 +238,44 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
           throw new EvalException(
                   "worker_executable must be a File or FilesToRunProvider, got: "
                           + Starlark.type(workerExecutableUnchecked));
+        }
+      }
+
+      // Validate and extract worker tools
+      NestedSet<Artifact> workerToolsSet = null;
+      if (workerToolsUnchecked != null && workerToolsUnchecked != Starlark.NONE) {
+        if (workerToolsUnchecked instanceof Sequence) {
+          // Process sequence: can contain Files or FilesToRunProviders
+          Sequence<?> toolsSeq = (Sequence<?>) workerToolsUnchecked;
+          NestedSetBuilder<Artifact> builder = NestedSetBuilder.stableOrder();
+
+          for (Object tool : toolsSeq) {
+            if (tool instanceof Artifact) {
+              builder.add((Artifact) tool);
+              // Also check if this artifact has runfiles
+              if (ctx instanceof StarlarkRuleContext) {
+                StarlarkRuleContext starlarkRuleContext = (StarlarkRuleContext) ctx;
+                FilesToRunProvider provider =
+                    starlarkRuleContext.getExecutableRunfiles((Artifact) tool, "worker_tools");
+                if (provider != null) {
+                  builder.addTransitive(provider.getFilesToRun());
+                }
+              }
+            } else if (tool instanceof FilesToRunProvider) {
+              builder.addTransitive(((FilesToRunProvider) tool).getFilesToRun());
+            } else {
+              throw new EvalException(
+                  "worker_tools must contain Files or FilesToRunProvider instances, got: "
+                      + Starlark.type(tool));
+            }
+          }
+          workerToolsSet = builder.build();
+        } else if (workerToolsUnchecked instanceof Depset) {
+          workerToolsSet = Depset.cast(workerToolsUnchecked, Artifact.class, "worker_tools");
+        } else {
+          throw new EvalException(
+              "worker_tools must be a sequence or depset, got: "
+                  + Starlark.type(workerToolsUnchecked));
         }
       }
 
@@ -258,6 +314,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
           workerCommandLines,
           testCommandLines,
           workerExec,
+          workerToolsSet,
           testInputsSet);
     }
 

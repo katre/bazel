@@ -47,7 +47,11 @@ We will define a new provider type, `PersistentTestInfo`, which test rules can r
     * If provided (non-empty string): The `--enable_persistent_test_runners` flag can control whether this persistent test runner is enabled based on regex matching
     * If not provided (null or empty string): The persistent test runner is always enabled (the flag cannot disable it)
     * Regardless of the `WorkerKeyMnemonic` value, a single worker cannot handle both test and non-test actions, and may end up with multiple instances running at once.
+* `worker_args`: A Starlark array of worker binary arguments, either Strings or `args` objects. These arguments are passed directly to the worker binary before test-specific arguments.
 * `test_args`: A Starlark array of the test runner arguments, either Strings or `args` objects. This will be passed to the test runner for each test executed, either directly on the command line (for single-use mode) or via the worker protocol (for persistent mode).
+* `worker_executable`: FilesToRunProvider - The persistent worker binary. When specified, this executable is used in the spawn's tools (affecting WorkerKey for worker reuse).
+* `worker_tools`: Sequence or Depset (optional) - Additional tools needed by the worker (e.g., helper binaries, configuration files). These affect WorkerKey computation, ensuring workers restart when tool files change.
+* `test_inputs`: Depset (optional) - Test-specific input files for each execution. These are passed via WorkRequest and do not affect WorkerKey.
 
 The test rule then creates the executable for the persistent worker binary as the test output, then returns all the standard providers (including runfiles, `OutputGroupInfo`, `RunEnvironmentInfo`, etc) and an instance of the new `PersistentTestInfo` provider.
 

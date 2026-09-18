@@ -980,6 +980,12 @@ persistent_test = rule(
         ),
     },
 )
+
+# TODO(worker_tools): Add test cases for worker_tools field:
+#   - Test that worker_tools are included in spawn tools
+#   - Test that worker restarts when worker_tools change
+#   - Test that worker_tools work with FilesToRunProvider
+#   - Test that worker_tools work with depsets
 EOF
 
   # Create BUILD file

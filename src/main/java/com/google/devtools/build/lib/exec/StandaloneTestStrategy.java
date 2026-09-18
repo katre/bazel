@@ -164,6 +164,7 @@ public class StandaloneTestStrategy extends TestStrategy {
     // Determine tools and inputs based on PersistentTestInfo
     // For persistent test runners:
     //   - workerExecutable (if provided) is used for tools (affects WorkerKey for worker reuse)
+    //   - worker_tools (if provided) are added to tools (additional files affecting WorkerKey)
     //   - testInputs (if provided) is used for inputs (test-specific files passed per request)
     // For non-persistent tests or when fields are null, use standard action values
     NestedSet<Artifact> spawnInputs = action.getInputs();
@@ -171,10 +172,21 @@ public class StandaloneTestStrategy extends TestStrategy {
 
     PersistentTestInfo persistentTestInfo = action.getPersistentTestInfo();
     if (persistentTestInfo != null) {
+      // Build spawn tools: workerExecutable + worker_tools
+      NestedSetBuilder<Artifact> toolsBuilder = NestedSetBuilder.stableOrder();
 
-      // Use worker executable for tools if provided
       if (persistentTestInfo.getWorkerExecutable() != null) {
-        spawnTools = persistentTestInfo.getWorkerExecutable().getFilesToRun();
+        toolsBuilder.addTransitive(persistentTestInfo.getWorkerExecutable().getFilesToRun());
+      }
+
+      if (persistentTestInfo.getWorkerTools() != null) {
+        toolsBuilder.addTransitive(persistentTestInfo.getWorkerTools());
+      }
+
+      // Only override if we have tools to add
+      if (persistentTestInfo.getWorkerExecutable() != null
+          || persistentTestInfo.getWorkerTools() != null) {
+        spawnTools = toolsBuilder.build();
       }
 
       // Use test inputs if provided
