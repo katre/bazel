@@ -117,6 +117,7 @@ sh_test(
     data = [
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker/testhelper:ExampleWorker_deploy.jar",
+        "//src/test/java/com/google/devtools/build/lib/worker/testhelper:PersistentTestWorker_deploy.jar",
     ],
     exec_group_compatible_with = {
         "test": ["//:highcpu_machine"],
@@ -152,6 +153,7 @@ sh_test(
     data = [
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker/testhelper:ExampleWorker_deploy.jar",
+        "//src/test/java/com/google/devtools/build/lib/worker/testhelper:PersistentTestWorker_deploy.jar",
     ],
     shard_count = 7,
     tags = [
@@ -185,6 +187,7 @@ sh_test(
     data = [
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker/testhelper:ExampleWorker_deploy.jar",
+        "//src/test/java/com/google/devtools/build/lib/worker/testhelper:PersistentTestWorker_deploy.jar",
     ],
     shard_count = 7,
     tags = [
@@ -205,6 +208,7 @@ sh_test(
     data = [
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker/testhelper:ExampleWorker_deploy.jar",
+        "//src/test/java/com/google/devtools/build/lib/worker/testhelper:PersistentTestWorker_deploy.jar",
     ],
     shard_count = 10,
     tags = [
@@ -279,6 +283,7 @@ sh_test(
     data = [
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker/testhelper:ExampleWorker_deploy.jar",
+        "//src/test/java/com/google/devtools/build/lib/worker/testhelper:PersistentTestWorker_deploy.jar",
     ],
     shard_count = 7,
     tags = [

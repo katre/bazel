@@ -923,7 +923,7 @@ function prepare_persistent_test_worker() {
   echo "different content" > actual_fail.txt
 
   # Create Starlark rule definition
-  cat >persistent_test.bzl <<'EOF'
+  cat >persistent_test.bzl <<EOF
 def _persistent_test_impl(ctx):
     # Get the worker executable with runfiles
     #worker_info = ctx.attr._worker[DefaultInfo]
@@ -945,7 +945,7 @@ def _persistent_test_impl(ctx):
     persistent_info = PersistentTestInfo(
         ctx = ctx,
         multiplex = False,
-        requires_worker_protocol = "proto",
+        requires_worker_protocol = "$WORKER_PROTOCOL",
         worker_key_mnemonic = "PersistentTestWorker",
         test_args = [args],
         worker_executable = worker,
