@@ -124,7 +124,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
 
   /** Returns the arguments as a Starlark-visible sequence of Args objects. */
   @Override
-  public Sequence<CommandLineArgsApi> getArguments() {
+  public Sequence<CommandLineArgsApi> getTestArgs() {
     ImmutableList.Builder<CommandLineArgsApi> result = ImmutableList.builder();
     // Empty set since test arguments typically don't involve directory artifacts
     ImmutableSet<Artifact> directoryInputs = ImmutableSet.of();
@@ -175,7 +175,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         Boolean multiplex,
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
-        Sequence<?> arguments,
+        Sequence<?> testArgs,
         @Nullable Object workerExecutableUnchecked,
         @Nullable Object testInputsUnchecked,
         StarlarkThread thread)
@@ -189,24 +189,28 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
 
       // Validate and extract worker executable
       FilesToRunProvider workerExec = null;
-      if (workerExecutableUnchecked instanceof Artifact workerExecutableArtifact) {
-        StarlarkRuleContext starlarkRuleContext = (StarlarkRuleContext) ctx;
-        workerExec = starlarkRuleContext.getExecutableRunfiles(workerExecutableArtifact, "worker_executable");
-      } else if (workerExecutableUnchecked instanceof FilesToRunProvider workerExecutableFiles) {
-        workerExec = workerExecutableFiles;
-      } else {
-        throw new EvalException(
-                "worker_executable must be a File or FilesToRunProvider, got: "
-                        + Starlark.type(workerExecutableUnchecked));
+      if (workerExecutableUnchecked != null) {
+        if (workerExecutableUnchecked instanceof Artifact workerExecutableArtifact) {
+          StarlarkRuleContext starlarkRuleContext = (StarlarkRuleContext) ctx;
+          workerExec = starlarkRuleContext.getExecutableRunfiles(workerExecutableArtifact, "worker_executable");
+        } else if (workerExecutableUnchecked instanceof FilesToRunProvider workerExecutableFiles) {
+          workerExec = workerExecutableFiles;
+        } else {
+          throw new EvalException(
+                  "worker_executable must be a File or FilesToRunProvider, got: "
+                          + Starlark.type(workerExecutableUnchecked));
+        }
       }
 
       // Validate and extract test inputs
       NestedSet<Artifact> testInputsSet = null;
-      if (testInputsUnchecked instanceof Sequence) {
-        Sequence<Artifact> inputs = Sequence.cast(testInputsUnchecked, Artifact.class, "inputs");
-        testInputsSet = NestedSetBuilder.wrap(Order.STABLE_ORDER, inputs);
-      } else {
-        testInputsSet = Depset.cast(testInputsUnchecked, Artifact.class, "inputs");
+      if (testInputsUnchecked != null) {
+        if (testInputsUnchecked instanceof Sequence) {
+          Sequence<Artifact> inputs = Sequence.cast(testInputsUnchecked, Artifact.class, "inputs");
+          testInputsSet = NestedSetBuilder.wrap(Order.STABLE_ORDER, inputs);
+        } else {
+          testInputsSet = Depset.cast(testInputsUnchecked, Artifact.class, "inputs");
+        }
       }
 
       // Get RepositoryMapping from thread context
@@ -223,7 +227,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       CommandLines.Builder builder = CommandLines.builder();
       ImmutableList.Builder<String> stringArgs = null;
 
-      for (Object arg : arguments) {
+      for (Object arg : testArgs) {
         if (arg instanceof String) {
           if (stringArgs == null) {
             stringArgs = ImmutableList.builder();
@@ -244,7 +248,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
           }
         } else {
           throw new EvalException(
-              "arguments must contain only strings or Args objects, got: " + Starlark.type(arg));
+              "test_args must contain only strings or Args objects, got: " + Starlark.type(arg));
         }
       }
 

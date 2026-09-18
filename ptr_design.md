@@ -47,7 +47,7 @@ We will define a new provider type, `PersistentTestInfo`, which test rules can r
     * If provided (non-empty string): The `--enable_persistent_test_runners` flag can control whether this persistent test runner is enabled based on regex matching
     * If not provided (null or empty string): The persistent test runner is always enabled (the flag cannot disable it)
     * Regardless of the `WorkerKeyMnemonic` value, a single worker cannot handle both test and non-test actions, and may end up with multiple instances running at once.
-* `Arguments`: A Starlark array of the test runner arguments, either Strings or `args` objects. This will be passed to the test runner for each test executed, either directly on the command line (for single-use mode) or via the worker protocol (for persistent mode).
+* `test_args`: A Starlark array of the test runner arguments, either Strings or `args` objects. This will be passed to the test runner for each test executed, either directly on the command line (for single-use mode) or via the worker protocol (for persistent mode).
 
 The test rule then creates the executable for the persistent worker binary as the test output, then returns all the standard providers (including runfiles, `OutputGroupInfo`, `RunEnvironmentInfo`, etc) and an instance of the new `PersistentTestInfo` provider.
 

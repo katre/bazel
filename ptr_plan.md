@@ -56,22 +56,22 @@ Create `src/test/java/com/google/devtools/build/lib/analysis/test/PersistentTest
 - Test Starlark field access
 - Test null/empty worker_key_mnemonic handling
 
-## Phase 1B: Add Arguments Field
+## Phase 1B: Add test_args Field
 
-Add `arguments` field with complex CommandLines handling.
+Add `test_args` field with complex CommandLines handling.
 
 ### Files to Modify
 
 **`src/main/java/com/google/devtools/build/lib/starlarkbuildapi/test/PersistentTestInfoApi.java`**
 - Add 4th field as `@StarlarkMethod(structField=true)`:
-  - `arguments`: Sequence<CommandLineArgsApi> - test runner args (read-only view for Starlark)
+  - `test_args`: Sequence<CommandLineArgsApi> - test runner args (read-only view for Starlark)
 
 **`src/main/java/com/google/devtools/build/lib/analysis/test/PersistentTestInfo.java`**
 - Modify to store CommandLines field for arguments
 - Update constructor to accept Sequence<?> containing Strings and Args objects (4th parameter)
 - Use StarlarkActionFactory.buildCommandLine() pattern to build CommandLines from mixed inputs
 - Provide getCommandLines() method for internal usage
-- Implement getArguments() to unpack CommandLines into Sequence<CommandLineArgsApi> for Starlark
+- Implement getTestArgs() to unpack CommandLines into Sequence<CommandLineArgsApi> for Starlark
 
 #### Argument Handling Implementation
 
@@ -154,10 +154,10 @@ public Sequence<CommandLineArgsApi> getArguments() {
 ### Tests
 
 Update `src/test/java/com/google/devtools/build/lib/analysis/test/PersistentTestInfoTest.java`:
-- Test arguments field with Strings
-- Test arguments field with Args objects
+- Test test_args field with Strings
+- Test test_args field with Args objects
 - Test mixed Strings and Args objects
-- Test empty arguments
+- Test empty test_args
 - Test invalid argument types (should fail)
 
 ## Phase 2: Flag Implementation

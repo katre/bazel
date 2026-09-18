@@ -86,8 +86,8 @@ java_test(
     srcs = ["PersistentTestInfoTest.java"],
     deps = [
         "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/analysis:analysis_cluster",
         "//src/main/java/com/google/devtools/build/lib/analysis:starlark/args",
-        "//src/main/java/com/google/devtools/build/lib/analysis:test/persistent_test_info",
         "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/build/lib/starlarkbuildapi",
         "//src/main/java/com/google/devtools/build/lib/supplier",
