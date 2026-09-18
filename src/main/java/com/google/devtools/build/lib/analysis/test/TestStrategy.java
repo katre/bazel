@@ -266,10 +266,10 @@ public abstract class TestStrategy implements TestActionContext {
     // Check if test uses PersistentTestInfo with custom arguments
     PersistentTestInfo persistentTestInfo = testAction.getPersistentTestInfo();
     if (persistentTestInfo != null) {
-      // Expand arguments from PersistentTestInfo provider
-      ExpandedCommandLines expanded =
+      // Expand worker arguments (added directly to command line)
+      ExpandedCommandLines expandedWorkerArgs =
           persistentTestInfo
-              .getCommandLines()
+              .getWorkerCommandLines()
               .expand(
                   actionExecutionContext != null
                       ? actionExecutionContext.getInputMetadataProvider()
@@ -278,14 +278,31 @@ public abstract class TestStrategy implements TestActionContext {
                   PathMapper.NOOP,
                   CommandLineLimits.UNLIMITED);
 
-      List<String> persistentTestArgs = expanded.arguments();
+      List<String> workerArgs = expandedWorkerArgs.arguments();
 
-      // If we have execution context, create a paramfile for the args
+      // Add worker args directly to command line
+      args.addAll(workerArgs);
+
+      // Expand test arguments (go into paramfile)
+      ExpandedCommandLines expandedTestArgs =
+          persistentTestInfo
+              .getTestCommandLines()
+              .expand(
+                  actionExecutionContext != null
+                      ? actionExecutionContext.getInputMetadataProvider()
+                      : null,
+                  testAction.getPrimaryOutput().getExecPath(),
+                  PathMapper.NOOP,
+                  CommandLineLimits.UNLIMITED);
+
+      List<String> persistentTestArgs = expandedTestArgs.arguments();
+
+      // If we have execution context, create a paramfile for test args
       if (actionExecutionContext != null && !persistentTestArgs.isEmpty()) {
         // Derive paramfile path from test output's parent directory
         PathFragment paramFilePath =
             ParameterFile.derivePath(
-               testAction.getPrimaryOutput().getExecPath(), "persistenttestinfo");
+                testAction.getPrimaryOutput().getExecPath(), "persistenttestinfo");
 
         // Create paramfile with persistent test arguments (DO NOT materialize it here)
         ParamFileActionInput paramFile =
@@ -295,7 +312,12 @@ public abstract class TestStrategy implements TestActionContext {
         args.add("@" + paramFilePath);
 
         // Return args WITH the paramfile for spawn input registration
-        return ExpandedTestArgs.of(args, new ImmutableList.Builder<ParamFileActionInput>().add(paramFile).addAll(expanded.getParamFiles()).build());
+        return ExpandedTestArgs.of(
+            args,
+            new ImmutableList.Builder<ParamFileActionInput>()
+                .add(paramFile)
+                .addAll(expandedTestArgs.getParamFiles())
+                .build());
       } else {
         // No execution context (introspection mode) - add args directly
         args.addAll(persistentTestArgs);

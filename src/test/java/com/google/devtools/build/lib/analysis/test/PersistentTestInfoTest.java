@@ -60,18 +60,33 @@ public final class PersistentTestInfoTest {
   @Test
   public void testDefaultValues() throws Exception {
     PersistentTestInfo info =
-        new PersistentTestInfo(false, "proto", "", CommandLines.builder().build(), null, null);
+        new PersistentTestInfo(
+            false,
+            "proto",
+            "",
+            CommandLines.builder().build(),
+            CommandLines.builder().build(),
+            null,
+            null);
 
     assertThat(info.getMultiplex()).isFalse();
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("proto");
     assertThat(info.getWorkerKeyMnemonic()).isNull();
+    assertThat(info.getWorkerArgs()).isEmpty();
     assertThat(info.getTestArgs()).isEmpty();
   }
 
   @Test
   public void testAllFieldsSpecified() throws Exception {
     PersistentTestInfo info =
-        new PersistentTestInfo(true, "json", "MyTestWorker", CommandLines.builder().build(), null, null);
+        new PersistentTestInfo(
+            true,
+            "json",
+            "MyTestWorker",
+            CommandLines.builder().build(),
+            CommandLines.builder().build(),
+            null,
+            null);
 
     assertThat(info.getMultiplex()).isTrue();
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("json");
@@ -80,21 +95,24 @@ public final class PersistentTestInfoTest {
 
   @Test
   public void testMultiplexTrue() throws Exception {
-    PersistentTestInfo info = new PersistentTestInfo(true, "proto", "", CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        true, "proto", "", CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getMultiplex()).isTrue();
   }
 
   @Test
   public void testJsonProtocol() throws Exception {
-    PersistentTestInfo info = new PersistentTestInfo(false, "json", "", CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        false, "json", "", CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("json");
   }
 
   @Test
   public void testProtoProtocol() throws Exception {
-    PersistentTestInfo info = new PersistentTestInfo(false, "proto", "", CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        false, "proto", "", CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("proto");
   }
@@ -104,7 +122,14 @@ public final class PersistentTestInfoTest {
     IllegalArgumentException exception =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new PersistentTestInfo(false, "invalid", "", CommandLines.builder().build(), null, null));
+            () -> new PersistentTestInfo(
+                false,
+                "invalid",
+                "",
+                CommandLines.builder().build(),
+                CommandLines.builder().build(),
+                null,
+                null));
 
     assertThat(exception)
         .hasMessageThat()
@@ -114,14 +139,16 @@ public final class PersistentTestInfoTest {
 
   @Test
   public void testNullMnemonic() throws Exception {
-    PersistentTestInfo info = new PersistentTestInfo(false, "proto", null, CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        false, "proto", null, CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getWorkerKeyMnemonic()).isNull();
   }
 
   @Test
   public void testEmptyMnemonic() throws Exception {
-    PersistentTestInfo info = new PersistentTestInfo(false, "proto", "", CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        false, "proto", "", CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getWorkerKeyMnemonic()).isNull();
   }
@@ -129,7 +156,14 @@ public final class PersistentTestInfoTest {
   @Test
   public void testNonEmptyMnemonic() throws Exception {
     PersistentTestInfo info =
-        new PersistentTestInfo(false, "proto", "JUnitRunner", CommandLines.builder().build(), null, null);
+        new PersistentTestInfo(
+            false,
+            "proto",
+            "JUnitRunner",
+            CommandLines.builder().build(),
+            CommandLines.builder().build(),
+            null,
+            null);
 
     assertThat(info.getWorkerKeyMnemonic()).isEqualTo("JUnitRunner");
   }
@@ -137,7 +171,14 @@ public final class PersistentTestInfoTest {
   @Test
   public void testStarlarkFieldAccess() throws Exception {
     PersistentTestInfo info =
-        new PersistentTestInfo(true, "json", "TestMnemonic", CommandLines.builder().build(), null, null);
+        new PersistentTestInfo(
+            true,
+            "json",
+            "TestMnemonic",
+            CommandLines.builder().build(),
+            CommandLines.builder().build(),
+            null,
+            null);
 
     assertThat(getattr(info, "multiplex")).isEqualTo(true);
     assertThat(getattr(info, "requires_worker_protocol")).isEqualTo("json");
@@ -150,7 +191,8 @@ public final class PersistentTestInfoTest {
     PersistentTestInfo.PersistentTestInfoProvider provider = PersistentTestInfo.PROVIDER;
     PersistentTestInfo info =
         (PersistentTestInfo)
-            provider.constructor(null, false, "proto", "", StarlarkList.empty(), null, null, thread);
+            provider.constructor(
+                null, false, "proto", "", StarlarkList.empty(), StarlarkList.empty(), null, null, thread);
 
     assertThat(info.getMultiplex()).isFalse();
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("proto");
@@ -164,7 +206,8 @@ public final class PersistentTestInfoTest {
     PersistentTestInfo.PersistentTestInfoProvider provider = PersistentTestInfo.PROVIDER;
     PersistentTestInfo info =
         (PersistentTestInfo)
-            provider.constructor(null, true, "json", "Worker", StarlarkList.empty(), null, null, thread);
+            provider.constructor(
+                null, true, "json", "Worker", StarlarkList.empty(), StarlarkList.empty(), null, null, thread);
 
     assertThat(info.getMultiplex()).isTrue();
     assertThat(info.getRequiresWorkerProtocol()).isEqualTo("json");
@@ -179,7 +222,8 @@ public final class PersistentTestInfoTest {
     EvalException exception =
         assertThrows(
             EvalException.class,
-            () -> provider.constructor(null, false, "xml", "", StarlarkList.empty(), null, null, thread));
+            () -> provider.constructor(
+                null, false, "xml", "", StarlarkList.empty(), StarlarkList.empty(), null, null, thread));
 
     assertThat(exception)
         .hasMessageThat()
@@ -189,7 +233,8 @@ public final class PersistentTestInfoTest {
 
   @Test
   public void testProviderType() {
-    PersistentTestInfo info = new PersistentTestInfo(false, "proto", "", CommandLines.builder().build(), null, null);
+    PersistentTestInfo info = new PersistentTestInfo(
+        false, "proto", "", CommandLines.builder().build(), CommandLines.builder().build(), null, null);
 
     assertThat(info.getProvider()).isSameInstanceAs(PersistentTestInfo.PROVIDER);
   }
@@ -201,7 +246,8 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     assertThat(info.getTestArgs()).isEmpty();
   }
@@ -213,7 +259,8 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     assertThat(info.getTestArgs()).hasSize(1); // One CommandLine containing all strings
     Sequence<CommandLineArgsApi> argsResult = info.getTestArgs();
@@ -229,7 +276,8 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     assertThat(info.getTestArgs()).hasSize(1); // One Args object
   }
@@ -243,7 +291,8 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     // Should have 3 command lines: [string1], [empty args], [string2]
     assertThat(info.getTestArgs()).hasSize(3);
@@ -257,7 +306,8 @@ public final class PersistentTestInfoTest {
 
     EvalException ex = assertThrows(
         EvalException.class,
-        () -> PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread));
+        () -> PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread));
     assertThat(ex).hasMessageThat().contains("test_args must contain only strings or Args objects");
   }
 
@@ -268,7 +318,8 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     Object argsAttr = getattr(info, "test_args");
     assertThat(argsAttr).isInstanceOf(Sequence.class);
@@ -281,11 +332,71 @@ public final class PersistentTestInfoTest {
 
     PersistentTestInfo info =
         (PersistentTestInfo)
-            PersistentTestInfo.PROVIDER.constructor(null, false, "proto", null, args, null, null, thread);
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, StarlarkList.empty(), args, null, null, thread);
 
     Sequence<CommandLineArgsApi> argsResult = info.getTestArgs();
     for (CommandLineArgsApi arg : argsResult) {
       assertThat(arg).isInstanceOf(CommandLineArgsApi.class);
     }
+  }
+
+  @Test
+  public void testWorkerArgsWithStrings() throws Exception {
+    StarlarkThread thread = createThreadWithContext();
+    Sequence<?> workerArgs = StarlarkList.immutableOf("--worker_protocol=json", "--verbose");
+
+    PersistentTestInfo info =
+        (PersistentTestInfo)
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, workerArgs, StarlarkList.empty(), null, null, thread);
+
+    assertThat(info.getWorkerArgs()).hasSize(1); // One CommandLine containing all strings
+    Sequence<CommandLineArgsApi> argsResult = info.getWorkerArgs();
+    assertThat(argsResult).isNotEmpty();
+  }
+
+  @Test
+  public void testWorkerArgsAndTestArgs() throws Exception {
+    StarlarkThread thread = createThreadWithContext();
+    Sequence<?> workerArgs = StarlarkList.immutableOf("--worker_protocol=json");
+    Sequence<?> testArgs = StarlarkList.immutableOf("--test-flag", "value");
+
+    PersistentTestInfo info =
+        (PersistentTestInfo)
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, workerArgs, testArgs, null, null, thread);
+
+    assertThat(info.getWorkerArgs()).hasSize(1);
+    assertThat(info.getTestArgs()).hasSize(1);
+  }
+
+  @Test
+  public void testWorkerArgsFieldAccess() throws Exception {
+    StarlarkThread thread = createThreadWithContext();
+    Sequence<?> workerArgs = StarlarkList.immutableOf("--flag");
+
+    PersistentTestInfo info =
+        (PersistentTestInfo)
+            PersistentTestInfo.PROVIDER.constructor(
+                null, false, "proto", null, workerArgs, StarlarkList.empty(), null, null, thread);
+
+    Object workerArgsAttr = getattr(info, "worker_args");
+    assertThat(workerArgsAttr).isInstanceOf(Sequence.class);
+  }
+
+  @Test
+  public void testWorkerArgsInvalidType() {
+    StarlarkThread thread = createThreadWithContext();
+    // Create a tuple with an integer (tuples allow any object)
+    Sequence<?> workerArgs = Tuple.of(456); // Invalid: integer
+
+    EvalException ex =
+        assertThrows(
+            EvalException.class,
+            () ->
+                PersistentTestInfo.PROVIDER.constructor(
+                    null, false, "proto", null, workerArgs, StarlarkList.empty(), null, null, thread));
+    assertThat(ex).hasMessageThat().contains("worker_args must contain only strings or Args objects");
   }
 }

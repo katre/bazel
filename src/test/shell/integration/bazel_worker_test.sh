@@ -937,9 +937,9 @@ def _persistent_test_impl(ctx):
     runfiles = ctx.runfiles(files = [worker, file1, file2])
     runfiles = runfiles.merge(ctx.attr._worker[DefaultInfo].default_runfiles)
 
-    args = ctx.actions.args()
-    args.add(file1)
-    args.add(file2)
+    test_args = ctx.actions.args()
+    test_args.add(file1)
+    test_args.add(file2)
 
     # Create PersistentTestInfo provider
     persistent_info = PersistentTestInfo(
@@ -947,7 +947,8 @@ def _persistent_test_impl(ctx):
         multiplex = False,
         requires_worker_protocol = "$WORKER_PROTOCOL",
         worker_key_mnemonic = "PersistentTestWorker",
-        test_args = [args],
+        worker_args = ["--worker_protocol=$WORKER_PROTOCOL"],
+        test_args = [test_args],
         worker_executable = worker,
         test_inputs = [file1, file2],
     )

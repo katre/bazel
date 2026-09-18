@@ -58,7 +58,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
   private final boolean multiplex;
   private final String requiresWorkerProtocol;
   @Nullable private final String workerKeyMnemonic;
-  private final CommandLines commandLines;
+  private final CommandLines workerCommandLines;
+  private final CommandLines testCommandLines;
   @Nullable private final FilesToRunProvider workerExecutable;
   @Nullable private final NestedSet<Artifact> testInputs;
 
@@ -68,7 +69,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
    * @param multiplex whether the worker can handle multiple concurrent test requests
    * @param requiresWorkerProtocol the protocol format ("proto" or "json")
    * @param workerKeyMnemonic optional mnemonic for flag-based filtering (null if not set)
-   * @param commandLines command lines for test runner arguments
+   * @param workerCommandLines command lines for worker binary arguments
+   * @param testCommandLines command lines for test runner arguments
    * @param workerExecutable the persistent worker executable (null if not specified)
    * @param testInputs test-specific input files (null if not specified)
    */
@@ -77,7 +79,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
       boolean multiplex,
       String requiresWorkerProtocol,
       @Nullable String workerKeyMnemonic,
-      CommandLines commandLines,
+      CommandLines workerCommandLines,
+      CommandLines testCommandLines,
       @Nullable FilesToRunProvider workerExecutable,
       @Nullable NestedSet<Artifact> testInputs) {
     this.multiplex = multiplex;
@@ -90,7 +93,8 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     // Store null if empty string or null is passed
     this.workerKeyMnemonic =
         (workerKeyMnemonic == null || workerKeyMnemonic.isEmpty()) ? null : workerKeyMnemonic;
-    this.commandLines = Preconditions.checkNotNull(commandLines);
+    this.workerCommandLines = Preconditions.checkNotNull(workerCommandLines);
+    this.testCommandLines = Preconditions.checkNotNull(testCommandLines);
     this.workerExecutable = workerExecutable;
     this.testInputs = testInputs;
   }
@@ -122,22 +126,38 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
     return workerKeyMnemonic;
   }
 
-  /** Returns the arguments as a Starlark-visible sequence of Args objects. */
+  /** Returns worker args as a Starlark-visible sequence of Args objects. */
+  @Override
+  public Sequence<CommandLineArgsApi> getWorkerArgs() {
+    ImmutableList.Builder<CommandLineArgsApi> result = ImmutableList.builder();
+    ImmutableSet<Artifact> directoryInputs = ImmutableSet.of();
+    for (CommandLineAndParamFileInfo cmdLine : workerCommandLines.unpack()) {
+      result.add(Args.forRegisteredAction(cmdLine, directoryInputs));
+    }
+    return StarlarkList.immutableCopyOf(result.build());
+  }
+
+  /** Returns the worker CommandLines for internal use during spawn creation. */
+  public CommandLines getWorkerCommandLines() {
+    return workerCommandLines;
+  }
+
+  /** Returns the test arguments as a Starlark-visible sequence of Args objects. */
   @Override
   public Sequence<CommandLineArgsApi> getTestArgs() {
     ImmutableList.Builder<CommandLineArgsApi> result = ImmutableList.builder();
     // Empty set since test arguments typically don't involve directory artifacts
     ImmutableSet<Artifact> directoryInputs = ImmutableSet.of();
 
-    for (CommandLineAndParamFileInfo cmdLine : commandLines.unpack()) {
+    for (CommandLineAndParamFileInfo cmdLine : testCommandLines.unpack()) {
       result.add(Args.forRegisteredAction(cmdLine, directoryInputs));
     }
     return StarlarkList.immutableCopyOf(result.build());
   }
 
-  /** Returns the CommandLines for internal use during spawn creation. */
-  public CommandLines getCommandLines() {
-    return commandLines;
+  /** Returns the test CommandLines for internal use during spawn creation. */
+  public CommandLines getTestCommandLines() {
+    return testCommandLines;
   }
 
   /**
@@ -175,6 +195,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         Boolean multiplex,
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
+        Sequence<?> workerArgs,
         Sequence<?> testArgs,
         @Nullable Object workerExecutableUnchecked,
         @Nullable Object testInputsUnchecked,
@@ -223,11 +244,41 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         repoMappingSupplier = () -> null;
       }
 
-      // Build CommandLines from the arguments sequence
+      // Build CommandLines for worker_args
+      CommandLines workerCommandLines =
+          buildCommandLines(workerArgs, repoMappingSupplier, "worker_args");
+
+      // Build CommandLines for test_args
+      CommandLines testCommandLines = buildCommandLines(testArgs, repoMappingSupplier, "test_args");
+
+      return new PersistentTestInfo(
+          multiplex,
+          requiresWorkerProtocol,
+          workerKeyMnemonic,
+          workerCommandLines,
+          testCommandLines,
+          workerExec,
+          testInputsSet);
+    }
+
+    /**
+     * Helper method to build CommandLines from a Sequence of strings or Args objects.
+     *
+     * @param args the sequence of arguments (strings or Args objects)
+     * @param repoMappingSupplier supplier for repository mapping
+     * @param fieldName name of the field (for error messages)
+     * @return the built CommandLines
+     * @throws EvalException if the arguments contain invalid types
+     */
+    private static CommandLines buildCommandLines(
+        Sequence<?> args,
+        InterruptibleSupplier<RepositoryMapping> repoMappingSupplier,
+        String fieldName)
+        throws EvalException {
       CommandLines.Builder builder = CommandLines.builder();
       ImmutableList.Builder<String> stringArgs = null;
 
-      for (Object arg : testArgs) {
+      for (Object arg : args) {
         if (arg instanceof String) {
           if (stringArgs == null) {
             stringArgs = ImmutableList.builder();
@@ -248,7 +299,9 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
           }
         } else {
           throw new EvalException(
-              "test_args must contain only strings or Args objects, got: " + Starlark.type(arg));
+              fieldName
+                  + " must contain only strings or Args objects, got: "
+                  + Starlark.type(arg));
         }
       }
 
@@ -257,8 +310,7 @@ public final class PersistentTestInfo extends NativeInfo implements PersistentTe
         builder.addCommandLine(CommandLine.of(stringArgs.build()));
       }
 
-      return new PersistentTestInfo(
-          multiplex, requiresWorkerProtocol, workerKeyMnemonic, builder.build(), workerExec, testInputsSet);
+      return builder.build();
     }
   }
 }

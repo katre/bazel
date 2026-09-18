@@ -76,7 +76,15 @@ public interface PersistentTestInfoApi extends StructApi {
   @Nullable
   String getWorkerKeyMnemonic();
 
-  // TODO(katre): split into worker_args and test_args
+  @StarlarkMethod(
+      name = "worker_args",
+      doc =
+          "A list of Args objects representing command-line arguments passed directly to the"
+              + " worker binary. These arguments are added to the spawn command line before"
+              + " the test-specific arguments. Use this for worker configuration like"
+              + " --worker_protocol. Returns an empty list if not specified.",
+      structField = true)
+  Sequence<CommandLineArgsApi> getWorkerArgs();
 
   @StarlarkMethod(
       name = "test_args",
@@ -157,6 +165,12 @@ public interface PersistentTestInfoApi extends StructApi {
                       + " filtering. Empty string (default) means always eligible for persistent"
                       + " worker mode."),
           @Param(
+              name = "worker_args",
+              defaultValue = "[]",
+              named = true,
+              positional = false,
+              doc = "Arguments for the worker binary itself. Can be strings or Args objects."),
+          @Param(
               name = "test_args",
               defaultValue = "[]",
               named = true,
@@ -195,6 +209,7 @@ public interface PersistentTestInfoApi extends StructApi {
         Boolean multiplex,
         String requiresWorkerProtocol,
         @Nullable String workerKeyMnemonic,
+        Sequence<?> workerArgs,
         Sequence<?> testArgs,
         @Nullable Object workerExecutableUnchecked,
         @Nullable Object testInputsUnchecked,

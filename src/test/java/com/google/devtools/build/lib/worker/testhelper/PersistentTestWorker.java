@@ -13,7 +13,9 @@
 // limitations under the License.
 package com.google.devtools.build.lib.worker.testhelper;
 
+import com.google.devtools.build.lib.actions.ExecutionRequirements;
 import com.google.devtools.build.lib.actions.ExecutionRequirements.WorkerProtocolFormat;
+import com.google.devtools.common.options.EnumConverter;
 import com.google.devtools.common.options.Option;
 import com.google.devtools.common.options.OptionDocumentationCategory;
 import com.google.devtools.common.options.OptionEffectTag;
@@ -51,6 +53,23 @@ public final class PersistentTestWorker extends WorkerBase<PersistentTestWorker.
         effectTags = {OptionEffectTag.UNKNOWN},
         help = "Run in persistent worker mode")
     public abstract boolean getPersistentWorker();
+
+    /** Enum converter for --worker_protocol. */
+    public static class WorkerProtocolEnumConverter
+        extends EnumConverter<ExecutionRequirements.WorkerProtocolFormat> {
+      public WorkerProtocolEnumConverter() {
+        super(ExecutionRequirements.WorkerProtocolFormat.class, "worker protocol format");
+      }
+    }
+
+    @Option(
+        name = "worker_protocol",
+        documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+        effectTags = {OptionEffectTag.EXECUTION},
+        defaultValue = "proto",
+        help = "The protocol (JSON or proto) to use for communication.",
+        converter = WorkerProtocolEnumConverter.class)
+    public abstract ExecutionRequirements.WorkerProtocolFormat getWorkerProtocol();
   }
 
   public static void main(String[] args) throws Exception {
@@ -79,8 +98,7 @@ public final class PersistentTestWorker extends WorkerBase<PersistentTestWorker.
 
   @Override
   protected WorkerProtocolFormat getProtocolFormat(PersistentTestWorkerOptions options) {
-    // PersistentTestWorker only supports PROTO format
-    return WorkerProtocolFormat.PROTO;
+    return options.getWorkerProtocol();
   }
 
   /**
