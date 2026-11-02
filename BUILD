@@ -304,6 +304,7 @@ platform(
         ":mount_capable",
     ],
     parents = ["@platforms//host"],
+    visibility = ["//visibility:public"],
 )
 
 platform(
