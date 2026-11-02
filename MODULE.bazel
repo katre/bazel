@@ -215,8 +215,8 @@ maven.install(
         "io.netty:netty-codec-compression:4.2.19.Final",
         "io.netty:netty-codec-http:4.2.19.Final",
         "io.netty:netty-codec-http2:4.2.19.Final",
-        "io.netty:netty-common:4.2.19.Final",
         "io.netty:netty-codec-socks:4.2.19.Final",
+        "io.netty:netty-common:4.2.19.Final",
         "io.netty:netty-handler:4.2.19.Final",
         "io.netty:netty-handler-proxy:4.2.19.Final",
         "io.netty:netty-resolver:4.2.19.Final",
@@ -532,16 +532,8 @@ local_repository(
 remote_coverage_tools_extension = use_extension("//tools/test:extensions.bzl", "remote_coverage_tools_extension")
 use_repo(remote_coverage_tools_extension, "remote_coverage_tools")
 
-# =========================================
-# Register platforms & toolchains
-# =========================================
-
-register_execution_platforms("//:default_host_platform")
-
-register_toolchains("//:all")
-
-register_toolchains("@local_config_winsdk//:all")
-
-register_toolchains("//tools/res:empty_rc_toolchain")
-
-register_toolchains("@graalvm_ce_toolchains//:gvm")
+bazel_dep(name = "bazel_dev_config", dev_dependency = True)
+local_path_override(
+    module_name = "bazel_dev_config",
+    path = "tools/dev",
+)
